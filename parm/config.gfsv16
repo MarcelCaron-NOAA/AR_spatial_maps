@@ -13,9 +13,9 @@ VAR=IVT                  # currently only IVT supported
 DOMAIN=nepac        # see domain map in ivt_from_grib.py
 
 # Paths
-HOME_DIR=/lfs/h2/emc/vpppg/noscrub/marcel.caron/AR_spatial_maps        # top of this repo
-COMOUT=/lfs/h2/emc/stmp/arafs_output/plots          # will be created
-TMP=/lfs/h2/emc/stmp/marcel.caron/tmp/${USER}/ivt_tmp              # scratch
+HOME_DIR=/lfs/h2/emc/vpppg/noscrub/${USER}/AR_spatial_maps        # top of this repo
+COMOUT=/lfs/h2/emc/stmp/${USER}/arafs_output/plots          # will be created
+TMP=/lfs/h2/emc/stmp/${USER}/tmp/${USER}/ivt_tmp              # scratch
 FIX=${HOME_DIR}/fix                   # logos, etc. (optional for now)
 
 # Model head directories (everything before date subpaths)

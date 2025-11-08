@@ -3,8 +3,8 @@
 #PBS -j oe
 #PBS -q dev
 #PBS -A VERF-DEV
-#PBS -l walltime=01:00:00
-#PBS -l place=vscatter:exclhost,select=1:ncpus=4:ompthreads=1:mem=100GB
+#PBS -l walltime=00:30:00
+#PBS -l place=vscatter:exclhost,select=1:ncpus=1:ompthreads=1:mem=150GB
 #PBS -l debug=true
 
 # Load environment
@@ -20,7 +20,7 @@ echo "Working directory: $(pwd)"
 echo
 
 # Run the plotting driver with your config
-bash scripts/ex-plots.sh parm/config.test
+bash scripts/ex-plots.sh parm/config.gfsv16
 
 # Done
 echo
