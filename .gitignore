@@ -1,0 +1,14 @@
+# cache
+__pycache__
+
+# logs
+ivt_arafs_plot.o*
+
+# editor
+*.swp
+
+# Output / data / scratch
+*.grib2
+*.log
+/tmp/
+/comout/
