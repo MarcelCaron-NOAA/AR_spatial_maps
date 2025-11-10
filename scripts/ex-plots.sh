@@ -62,6 +62,12 @@ case "${MODEL}" in
     FILE_PATH="${FILE_PATH//\{HEAD_GFSV17\}/$HEAD_GFSV17}"
     FILE_PATH="${FILE_PATH//\{FHR3\}/$FHR3}"
     ;;
+  gdas)
+    eval FILE_PATH="${TEMPLATE_GDAS//\{IDATE\}/$IDATE}"
+    FILE_PATH="${FILE_PATH//\{IHOUR\}/$IHOUR}"
+    FILE_PATH="${FILE_PATH//\{HEAD_GDAS\}/$HEAD_GDAS}"
+    FILE_PATH="${FILE_PATH//\{FHR3\}/$FHR3}"
+    ;;
   arafs)
     eval FILE_PATH="${TEMPLATE_ARAFS//\{IDATE\}/$IDATE}"
     FILE_PATH="${FILE_PATH//\{IHOUR\}/$IHOUR}"
