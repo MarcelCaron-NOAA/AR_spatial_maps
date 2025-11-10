@@ -1,5 +1,5 @@
 #!/bin/bash
-#PBS -N ivt_arafs_plot
+#PBS -N iwv_arafs_plot
 #PBS -j oe
 #PBS -q dev
 #PBS -A VERF-DEV
@@ -20,7 +20,7 @@ echo "Working directory: $(pwd)"
 echo
 
 # Run the plotting driver with your config
-bash scripts/ex-plots.sh parm/config.arafs.ivt
+bash scripts/ex-plots.sh parm/config.gfsv16.iwv
 
 # Done
 echo

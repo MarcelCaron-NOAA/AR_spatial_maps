@@ -20,7 +20,7 @@ echo "Working directory: $(pwd)"
 echo
 
 # Run the plotting driver with your config
-bash scripts/ex-plots.sh parm/config.arafs.ivt
+bash scripts/ex-plots.sh parm/config.gdas.ivt
 
 # Done
 echo

@@ -20,7 +20,7 @@ echo "Working directory: $(pwd)"
 echo
 
 # Run the plotting driver with your config
-bash scripts/ex-plots.sh parm/config.gfsv16
+bash scripts/ex-plots.sh parm/config.gfsv16.ivt
 
 # Done
 echo
