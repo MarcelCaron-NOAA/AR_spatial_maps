@@ -274,6 +274,46 @@ def compute_ivt(gf, pmin_mb=1000, pmax_mb=200, g=9.80665):
     LON, LAT = _latlon_from_msg(ref_msg)
     return IVTu, IVTv, IVT, (LON, LAT)
 
+def compute_iwv(gf, pmin_mb=1000, pmax_mb=200, g=9.80665):
+    """
+    IWV (a.k.a. precipitable water) = (1/g) ∫ q dp
+    Sign-safe: integrates with ascending pressure so dp > 0.
+    Returns IWV_mm, (LON, LAT)
+    """
+    # Reuse your field collector; only SPFH is needed here
+    plevels, q_by, _, _ = _collect_pl_fields(gf)
+
+    # Filter to requested span
+    flist = [(lbl, p) for (lbl, p) in plevels if pmax_mb <= p <= pmin_mb]
+    if len(flist) < 2:
+        raise RuntimeError("Not enough levels in requested pressure range for IWV.")
+
+    # Arrays
+    Ps_mb = np.array([p for _, p in flist])                 # (L,)
+    Qs    = np.array([q_by[lbl] for lbl, _ in flist])       # (L, ny, nx)  kg/kg
+
+    # *** key: ASCENDING pressure so dp > 0 ***
+    order = np.argsort(Ps_mb)                               # low→high
+    Ps_pa = Ps_mb[order].astype(float) * 100.0              # Pa
+    Qs    = Qs[order]
+
+    # Trapezoidal layer means
+    dp   = np.diff(Ps_pa)                                   # (L-1,), positive
+    qbar = 0.5 * (Qs[:-1] + Qs[1:])
+    dp3  = dp[:, None, None]
+
+    IWV_kgm2 = np.nansum(qbar * dp3, axis=0) / g           # kg m^-2
+    IWV_mm   = IWV_kgm2                                     # 1 kg m^-2 == 1 mm
+
+    # Clean tiny negative numerical noise
+    IWV_mm = np.where(IWV_mm < 0, np.clip(IWV_mm, 0, None), IWV_mm)
+
+    # Lon/lat from a representative SPFH message (after reordering)
+    ref_lbl = flist[order[0]][0]
+    ref_msg = read_msgs_by_name_and_level(gf, "SPFH", return_msgs=True)[ref_lbl]
+    LON, LAT = _latlon_from_msg(ref_msg)
+    return IWV_mm, (LON, LAT)
+
 def fetch_slp(gf):
     """
     Return 2-D array of mean-sea-level pressure (hPa) and the units string.
@@ -303,6 +343,21 @@ def fetch_slp(gf):
         return slp, units
 
     raise RuntimeError("Neither PRMSL nor MSLET found for SLP contours.")
+
+def fetch_uv_at_level(gf, level_mb=850):
+    """
+    Return (U, V, (LON, LAT)) for a single isobaric level (mb).
+    """
+    target_lbl = f"{int(level_mb)} mb"
+    u_by = read_msgs_by_name_and_level(gf, "UGRD", return_msgs=False)
+    v_by = read_msgs_by_name_and_level(gf, "VGRD", return_msgs=False)
+    if target_lbl not in u_by or target_lbl not in v_by:
+        raise RuntimeError(f"UGRD/VGRD not found at {target_lbl}")
+    # Build lon/lat from one of the wind messages at that level
+    u_msgs = read_msgs_by_name_and_level(gf, "UGRD", return_msgs=True)
+    ref_msg = u_msgs[target_lbl]
+    LON, LAT = _latlon_from_msg(ref_msg)
+    return u_by[target_lbl], v_by[target_lbl], (LON, LAT)
 
 def extent_from_domain(domain):
     domains = {
@@ -352,10 +407,12 @@ def choose_quiver_stride(model: str, user_qs: int = None, nx: int = None, ny: in
     if user_qs is not None:
         return max(1, int(user_qs))
 
+    # These are overridden by strides passed in config
     defaults = {
         "gfsv16": 5,       # 0.25° grid -> denser, so smaller stride
         "gfsv17": 5,    
-        "arafs": 100,       # finer grid -> larger stride (thin more)
+        "gdas": 5,    
+        "arafs": 83,       # finer grid -> larger stride (thin more)
     }
     key = (model or "").lower()
     if key in defaults:
@@ -587,4 +644,33 @@ def draw_basemap(ax, datacrs=ccrs.PlateCarree(), extent=None, xticks=None,
         ax.set_extent(extent, crs=datacrs)  # example for CONUS_West; we’ll parameterize later
         
     return ax
+
+def wind_ms_to_knots(x):
+    """Convert m/s to knots (vectorized)."""
+    return np.asarray(x) * 1.9438444924406048
+
+def default_barb_kwargs(model, scaling_factor=1.0):
+    """
+    Tuned, readable barb style. Returns kwargs for ax.barbs.
+    - length scales a bit with figure scaling.
+    - increments are in *knots* (since we convert U/V to knots).
+    """
+    # tweak length by model density if you like
+    base_len = 5.5
+    if str(model).lower() == "arafs":
+        base_len = 5.0  # a touch shorter for denser grid
+    length = base_len * (0.95 + 0.1 * (scaling_factor ** 0.5))
+
+    return dict(
+        length=length,                 # barb length in points
+        linewidth=0.5,
+        pivot="middle",                # keeps shafts centered on points
+        barb_increments=dict(half=5, full=10, flag=50),  # all in knots
+        sizes={                        # fine-tune geometry
+            "emptybarb": 0.08,
+            "spacing":   0.20,
+            "height":    0.35,
+            "width":     0.25,
+        }
+    )
 
