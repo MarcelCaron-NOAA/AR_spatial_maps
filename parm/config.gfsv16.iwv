@@ -3,13 +3,13 @@
 ########################################
 # Time selectors
 DATE_TYPE=INIT           # INIT | VALID
-DATE=20251101            # YYYYMMDD
-HOUR=00                  # HH (00-23)
+DATE=20251110            # YYYYMMDD
+HOUR=12                  # HH (00-23)
 FHR=24                   # integer hours
 
 # What to plot
-MODEL=arafs             # gfsv16 | gfsv17 | arafs
-VAR=IVT                  # currently only IVT supported
+MODEL=gfsv16             # gfsv16 | gfsv17 | arafs
+VAR=IWV                  # currently only IVT supported
 DOMAIN=nepac        # see domain map in ivt_from_grib.py
 
 # Paths
@@ -30,6 +30,6 @@ TEMPLATE_GFSV16='{HEAD_GFSV16}/gfs.{IDATE}/{IHOUR}/atmos/gfs.t{IHOUR}z.pgrb2.0p2
 TEMPLATE_ARAFS='{HEAD_ARAFS}/{IDATE}{IHOUR}/00E/{IDATE}{IHOUR}.arafs.parent.atm.f{FHR3}.grb2'
 
 # Plot style / options
-QUIVER_STRIDE=50          # thin wind vectors (grid stride)
+QUIVER_STRIDE=10          # thin wind vectors (grid stride)
 SLP_CONTOURS="980 996 1004 1012 1020 1028 1036"  # hPa labels (optional)
 

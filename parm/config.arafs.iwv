@@ -1,0 +1,35 @@
+########################################
+# User configuration for IVT plotting
+########################################
+# Time selectors
+DATE_TYPE=INIT           # INIT | VALID
+DATE=20251101            # YYYYMMDD
+HOUR=00                  # HH (00-23)
+FHR=24                   # integer hours
+
+# What to plot
+MODEL=arafs             # gfsv16 | gfsv17 | arafs
+VAR=IWV                  # currently only IVT supported
+DOMAIN=nepac        # see domain map in ivt_from_grib.py
+
+# Paths
+HOME_DIR=/lfs/h2/emc/vpppg/noscrub/${USER}/AR_spatial_maps        # top of this repo
+COMOUT=/lfs/h2/emc/stmp/${USER}/arafs_output/plots          # will be created
+TMP=/lfs/h2/emc/stmp/${USER}/tmp/${USER}/ivt_tmp              # scratch
+FIX=${HOME_DIR}/fix                   # logos, etc. (optional for now)
+
+# Model head directories (everything before date subpaths)
+HEAD_GFSV16=/lfs/h1/ops/prod/com/gfs/v16.3
+HEAD_GFSV17=/lfs/h1/ops/prod/com/gfs/v17.0   # adjust if/when used
+HEAD_ARAFS=/lfs/h2/emc/ptmp/xingren.wu/ARAFS_NRT_2025
+
+# Filename templates (bash will expand these; {FHR3} -> zero-padded)
+# GFSv16:
+TEMPLATE_GFSV16='{HEAD_GFSV16}/gfs.{IDATE}/{IHOUR}/atmos/gfs.t{IHOUR}z.pgrb2.0p25.f{FHR3}'
+# ARAFS:
+TEMPLATE_ARAFS='{HEAD_ARAFS}/{IDATE}{IHOUR}/00E/{IDATE}{IHOUR}.arafs.parent.atm.f{FHR3}.grb2'
+
+# Plot style / options
+QUIVER_STRIDE=83          # thin wind vectors (grid stride)
+SLP_CONTOURS="980 996 1004 1012 1020 1028 1036"  # hPa labels (optional)
+
