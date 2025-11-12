@@ -23,4 +23,8 @@ done
 
 mkdir -p "${COMOUT}"
 
-python3 "$(dirname "$0")/ivt_from_grib.py" "${ARGS[@]}"
+if [[ "${machine}" == "gaeac6" ]]; then
+    "${CONDA_PREFIX}/bin/python" "$(dirname "$0")/ivt_from_grib.py" "${ARGS[@]}"
+else
+    python3 "$(dirname "$0")/ivt_from_grib.py" "${ARGS[@]}"
+fi

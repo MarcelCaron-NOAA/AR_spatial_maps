@@ -6,7 +6,14 @@ THISDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOPDIR="$(cd "${THISDIR}/.." && pwd)"
 
 # 1) Environment
-source "${TOPDIR}/versions/run.env"
+if [[ "${HOSTNAME}" == "gaea6"* ]]; then
+   export machine=gaeac6
+elif [[ "${HOSTNAME}" == "clogin"* ]] || [[ "${HOSTNAME}" == "dlogin"* ]]; then
+   export machine=wcoss2
+else
+   echo "Machine not supported: ${HOSTNAME}" >&2; exit 2
+fi
+source "${TOPDIR}/modulefiles/${machine}.env"
 
 # 2) Config
 CFG="${1:-${TOPDIR}/parm/config.example}"
