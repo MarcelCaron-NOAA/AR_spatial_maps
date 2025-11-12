@@ -10,5 +10,6 @@ ivt_arafs_plot.o*
 # Output / data / scratch
 *.grib2
 *.log
+*.out
 /tmp/
 /comout/

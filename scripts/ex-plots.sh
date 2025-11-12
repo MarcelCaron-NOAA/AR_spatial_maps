@@ -6,7 +6,7 @@ THISDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOPDIR="$(cd "${THISDIR}/.." && pwd)"
 
 # 1) Environment
-if [[ "${HOSTNAME}" == "gaea6"* ]]; then
+if [[ "${HOSTNAME}" == "gaea6"* ]] || [[ "${HOSTNAME}" == "c6"* ]]; then
    export machine=gaeac6
 elif [[ "${HOSTNAME}" == "clogin"* ]] || [[ "${HOSTNAME}" == "dlogin"* ]]; then
    export machine=wcoss2

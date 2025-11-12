@@ -1,21 +1,9 @@
 #!/bin/bash
 
 export craympich_ver=9.0.1
-#export craypals_ver=1.2.2
 export geos_ver=3.12.1
-#export grib_util_ver=1.2.4
 export imagemagick_ver=7.1.1-29
 export intel_ver=2025.2
-#export jasper_ver=2.0.25
-#export libjpeg_ver=9c
-#export libjpeg_turbo_ver=2.1.0
-#export libpng_ver=1.6.37
 export miniforge3_ver=25.3.0-3
-#export netcdf_ver=4.7.4
 export PrgEnvintel_ver=8.6.0
-#export prod_envir_ver=2.0.6
-#export prod_util_ver=2.0.13
-#export proj_ver=7.1.0
-#export ve_evs_ver=1.0
 export wgrib2_ver=3.1.1-omp
-#export zlib_ver=1.2.11
