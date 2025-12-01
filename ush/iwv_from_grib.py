@@ -214,6 +214,7 @@ def main():
     ofn = os.path.join(datedir, f"{args.var}.{args.model}.{args.idate}{args.ihour}.f{int(args.fhr):03d}.{args.domain}.png")
     plt.savefig(ofn, bbox_inches="tight")
     plt.close(fig)
+    os.chmod(ofn, 0o755)
     print(f"New image created: {ofn}")
 
 if __name__ == "__main__":
