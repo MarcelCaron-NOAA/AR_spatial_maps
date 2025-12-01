@@ -13,3 +13,6 @@ ivt_arafs_plot.o*
 *.out
 /tmp/
 /comout/
+
+# dev
+/slurm/
