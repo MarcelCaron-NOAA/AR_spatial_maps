@@ -3,13 +3,14 @@ __pycache__
 
 # logs
 ivt_arafs_plot.o*
+default_plot.o*
+*.log
 
 # editor
 *.swp
 
 # Output / data / scratch
 *.grib2
-*.log
 *.out
 /tmp/
 /comout/

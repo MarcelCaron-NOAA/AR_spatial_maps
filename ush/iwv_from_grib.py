@@ -29,6 +29,7 @@ def main():
     ap.add_argument("--tmp", default="/tmp")
     ap.add_argument("--quiver-stride", type=int, default=10)
     ap.add_argument("--slp-contours", default="")
+    ap.add_argument("--bool_analysis", default="")
 
     ap.add_argument("--home", default=os.getenv("HOME", ""))
     ap.add_argument("--comout", default=None)
@@ -198,7 +199,12 @@ def main():
     )
     iyear, vyear = (args.idate[:4], args.vdate[:4])
     model_string = dicts.get_model_name(args.model)
-    title_left = f"Initialized: {args.ihour}Z {iday} {imonth} {iyear} (F{int(args.fhr):03d})"
+    if args.bool_analysis == "TRUE" and int(args.fhr) == 0:
+        title_left = f"Initialized: {args.ihour}Z {iday} {imonth} {iyear} (Analysis)"
+        ofn = f"{args.var}.{args.model}.{args.idate}{args.ihour}.anl.{args.domain}.png"
+    else:
+        title_left = f"Initialized: {args.ihour}Z {iday} {imonth} {iyear} (F{int(args.fhr):03d})"
+        ofn = f"{args.var}.{args.model}.{args.idate}{args.ihour}.f{int(args.fhr):03d}.{args.domain}.png"
     title_right = f"Valid: {args.vhour}Z {vday} {vmonth} {vyear}"
     title_main = f"{model_string} {var_string}"
     default_fs = matplotlib.rcParams['axes.titlesize']
@@ -210,12 +216,11 @@ def main():
 
     datedir = os.path.join(outdir, args.idate)
     os.makedirs(datedir, exist_ok=True)
-
-    ofn = os.path.join(datedir, f"{args.var}.{args.model}.{args.idate}{args.ihour}.f{int(args.fhr):03d}.{args.domain}.png")
-    plt.savefig(ofn, bbox_inches="tight")
+    ofp = os.path.join(datedir, ofn)
+    plt.savefig(ofp, bbox_inches="tight")
     plt.close(fig)
-    os.chmod(ofn, 0o755)
-    print(f"New image created: {ofn}")
+    os.chmod(ofp, 0o755)
+    print(f"New image created: {ofp}")
 
 if __name__ == "__main__":
     main()

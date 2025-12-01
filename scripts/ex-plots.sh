@@ -8,7 +8,7 @@ TOPDIR="$(cd "${THISDIR}/.." && pwd)"
 # 1) Environment
 if [[ "${HOSTNAME}" == "gaea6"* ]] || [[ "${HOSTNAME}" == "c6"* ]]; then
    export machine=gaeac6
-elif [[ "${HOSTNAME}" == "clogin"* ]] || [[ "${HOSTNAME}" == "dlogin"* ]]; then
+elif [[ "${HOSTNAME}" == "clogin"* ]] || [[ "${HOSTNAME}" == "dlogin"* ]] || [[ "${HOSTNAME}" == "nid"* ]]; then
    export machine=wcoss2
 else
    echo "Machine not supported: ${HOSTNAME}" >&2; exit 2
@@ -118,5 +118,6 @@ fi
   --tmp "${TMP}" \
   --fix "${FIX}" \
   --quiver-stride "${QUIVER_STRIDE}" \
-  --slp-contours "${SLP_CONTOURS}"
+  --slp-contours "${SLP_CONTOURS}" \
+  --bool_analysis "${BOOL_ANALYSIS}"
 
