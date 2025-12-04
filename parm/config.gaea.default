@@ -4,7 +4,7 @@
 # Time selectors
 DATE_TYPE=INIT           # INIT | VALID
 DATE=${YEAR}${MONTH}${DAY}            # YYYYMMDD
-HOUR=00                  # HH (00-23)
+HOUR=${IHOUR}                  # HH (00-23)
 FHR=${FHOUR}                   # integer hours
 
 # What to plot
