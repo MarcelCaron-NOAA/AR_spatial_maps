@@ -203,9 +203,7 @@ def main():
     ax.set_title(title_left, loc="left")
     ax.set_title(title_main + "\n", fontsize=main_fs, loc="center")
 
-    datedir = os.path.join(outdir, args.idate)
-    os.makedirs(datedir, exist_ok=True)
-    ofp = os.path.join(datedir, ofn)
+    ofp = os.path.join(outdir, ofn)
     plt.savefig(ofp, bbox_inches="tight")
     plt.close(fig)
     os.chmod(ofp, 0o755)
