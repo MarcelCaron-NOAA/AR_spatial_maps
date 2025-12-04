@@ -3,8 +3,8 @@
 ########################################
 # Time selectors
 DATE_TYPE=INIT           # INIT | VALID
-DATE=202511${DAY}            # YYYYMMDD
-HOUR=00                  # HH (00-23)
+DATE=${YEAR}${MONTH}${DAY}            # YYYYMMDD
+HOUR=${HOUR}                  # HH (00-23)
 FHR=${FHOUR}                   # integer hours
 
 # What to plot
@@ -37,4 +37,4 @@ TEMPLATE_ARAFS='{HEAD_ARAFS}/{IDATE}{IHOUR}/00E/{IDATE}{IHOUR}.arafs.parent.atm.
 # Plot style / options
 QUIVER_STRIDE=10          # thin wind vectors (grid stride)
 SLP_CONTOURS="980 996 1004 1012 1020 1028 1036"  # hPa labels (optional)
-BOOL_ANALYSIS=TRUE
+BOOL_ANALYSIS=${BOOL_ANL}

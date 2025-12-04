@@ -19,10 +19,14 @@ echo "Start time: $(date)"
 echo "Working directory: $(pwd)"
 echo
 
+export YEAR=${YEAR:-2025}
+export MONTH=${MONTH:-11}
 export DAY=${DAY:-01}
+export HOUR=${HOUR:-00}
 export FHOUR=${FHOUR:-24}
 export VARIABLE=${VARIABLE:-IVT}
 export MOD=${MOD:-gfsv16}
+export BOOL_ANL=${BOOL_ANL:-FALSE}
 
 # Run the plotting driver with your config
 bash scripts/ex-plots.sh parm/config.wcoss2.default
