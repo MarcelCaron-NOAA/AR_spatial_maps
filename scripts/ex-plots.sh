@@ -55,42 +55,33 @@ echo "VALID: ${VDATE} ${VHOUR}Z"
 
 FHR3=$(printf "%03d" "${FHR}")
 
-# 4) Build file path(s)
+VAR_LC=$(echo "${VAR}" | tr '[:upper:]' '[:lower:]')
+
+# --- Build FILE_TEMPLATE (meteograms need it; safe for all vars) ---
 case "${MODEL}" in
-  gfsv16)
-    eval FILE_PATH="${TEMPLATE_GFSV16//\{IDATE\}/$IDATE}"
-    FILE_PATH="${FILE_PATH//\{IHOUR\}/$IHOUR}"
-    FILE_PATH="${FILE_PATH//\{HEAD_GFSV16\}/$HEAD_GFSV16}"
-    FILE_PATH="${FILE_PATH//\{FHR3\}/$FHR3}"
-    ;;
-  gfsv17)
-    eval FILE_PATH="${TEMPLATE_GFSV17//\{IDATE\}/$IDATE}"
-    FILE_PATH="${FILE_PATH//\{IHOUR\}/$IHOUR}"
-    FILE_PATH="${FILE_PATH//\{HEAD_GFSV17\}/$HEAD_GFSV17}"
-    FILE_PATH="${FILE_PATH//\{FHR3\}/$FHR3}"
-    ;;
-  gdas)
-    eval FILE_PATH="${TEMPLATE_GDAS//\{IDATE\}/$IDATE}"
-    FILE_PATH="${FILE_PATH//\{IHOUR\}/$IHOUR}"
-    FILE_PATH="${FILE_PATH//\{HEAD_GDAS\}/$HEAD_GDAS}"
-    FILE_PATH="${FILE_PATH//\{FHR3\}/$FHR3}"
-    ;;
-  arafs)
-    eval FILE_PATH="${TEMPLATE_ARAFS//\{IDATE\}/$IDATE}"
-    FILE_PATH="${FILE_PATH//\{IHOUR\}/$IHOUR}"
-    FILE_PATH="${FILE_PATH//\{HEAD_ARAFS\}/$HEAD_ARAFS}"
-    FILE_PATH="${FILE_PATH//\{FHR3\}/$FHR3}"
-    ;;
-  *)
-    echo "Unsupported MODEL=${MODEL}" >&2; exit 3;;
+  gfsv16) TEMPLATE_RAW="${TEMPLATE_GFSV16}";;
+  gfsv17) TEMPLATE_RAW="${TEMPLATE_GFSV17}";;
+  gdas)   TEMPLATE_RAW="${TEMPLATE_GDAS}";;
+  arafs)  TEMPLATE_RAW="${TEMPLATE_ARAFS}";;
+  *) echo "Unsupported MODEL=${MODEL}" >&2; exit 3;;
 esac
 
-if [[ ! -s "${FILE_PATH}" ]]; then
-  echo "GRIB2 file missing: ${FILE_PATH}" >&2; exit 4
+# Expand everything except {FHR3}; leave {FHR3} for later substitution
+FILE_TEMPLATE="${TEMPLATE_RAW//\{IDATE\}/$IDATE}"
+FILE_TEMPLATE="${FILE_TEMPLATE//\{IHOUR\}/$IHOUR}"
+FILE_TEMPLATE="${FILE_TEMPLATE//\{HEAD_GFSV16\}/$HEAD_GFSV16}"
+FILE_TEMPLATE="${FILE_TEMPLATE//\{HEAD_GFSV17\}/$HEAD_GFSV17}"
+FILE_TEMPLATE="${FILE_TEMPLATE//\{HEAD_GDAS\}/$HEAD_GDAS}"
+FILE_TEMPLATE="${FILE_TEMPLATE//\{HEAD_ARAFS\}/$HEAD_ARAFS}"
+
+if [[ "${VAR_LC}" != "meteogram" ]]; then
+    FILE_PATH="${FILE_TEMPLATE//\{FHR3\}/$FHR3}"
+    if [[ ! -s "${FILE_PATH}" ]]; then
+        echo "GRIB2 file missing: ${FILE_PATH}" >&2; exit 4
+    fi
 fi
 
 # 5) Hand off to plotting shell wrapper (plugin per VAR)
-VAR_LC=$(echo "${VAR}" | tr '[:upper:]' '[:lower:]')
 PLOT_SH="${TOPDIR}/ush/plot_${VAR_LC}.sh"
 GENERIC_SH="${TOPDIR}/ush/plot_generic.sh"
 
@@ -104,20 +95,34 @@ else
   exit 5
 fi
 
-"${TARGET_SH}" \
-  --model "${MODEL}" \
-  --file "${FILE_PATH}" \
-  --date-type "${DATE_TYPE}" \
-  --idate "${IDATE}" --ihour "${IHOUR}" \
-  --vdate "${VDATE}" --vhour "${VHOUR}" \
-  --fhr "${FHR}" \
-  --var "${VAR}" \
-  --domain "${DOMAIN}" \
-  --home "${HOME_DIR}" \
-  --comout "${COMOUT}" \
-  --tmp "${TMP}" \
-  --fix "${FIX}" \
-  --quiver-stride "${QUIVER_STRIDE}" \
-  --slp-contours "${SLP_CONTOURS}" \
-  --bool_analysis "${BOOL_ANALYSIS}"
-
+if [[ "${VAR_LC}" == "meteogram" ]]; then
+   "${TARGET_SH}" \
+     --model "${MODEL}" \
+     --date-type "${DATE_TYPE}" \
+     --idate "${IDATE}" --ihour "${IHOUR}" \
+     --vdate "${VDATE}" --vhour "${VHOUR}" \
+     --fhrs "${FHRS}" \
+     --file-template "${FILE_TEMPLATE}" \
+     --lat "${POINT_LAT}" --lon "${POINT_LON}" \
+     --home "${HOME_DIR}" \
+     --comout "${COMOUT}" \
+     --tmp "${TMP}" \
+     --fix "${FIX}"
+else
+    "${TARGET_SH}" \
+      --model "${MODEL}" \
+      --file "${FILE_PATH}" \
+      --date-type "${DATE_TYPE}" \
+      --idate "${IDATE}" --ihour "${IHOUR}" \
+      --vdate "${VDATE}" --vhour "${VHOUR}" \
+      --fhr "${FHR}" \
+      --var "${VAR}" \
+      --domain "${DOMAIN}" \
+      --home "${HOME_DIR}" \
+      --comout "${COMOUT}" \
+      --tmp "${TMP}" \
+      --fix "${FIX}" \
+      --quiver-stride "${QUIVER_STRIDE}" \
+      --slp-contours "${SLP_CONTOURS}" \
+      --bool_analysis "${BOOL_ANALYSIS}"
+fi
