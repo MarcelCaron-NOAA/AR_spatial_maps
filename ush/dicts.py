@@ -452,6 +452,9 @@ def get_model_name(model):
         'gfsv17': {
             'long_name': 'GFSv17',
         },
+        'aigfsv1': {
+            'long_name': 'AIGFSv1',
+        },
         'gdas': {
             'long_name': 'GDAS',
         },

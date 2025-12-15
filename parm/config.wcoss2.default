@@ -22,8 +22,9 @@ FIX=${HOME_DIR}/fix                   # logos, etc. (optional for now)
 HEAD_GFSV16=/lfs/h1/ops/prod/com/gfs/v16.3
 HEAD_GDAS=/lfs/h1/ops/prod/com/gfs/v16.3
 HEAD_GFSV17=/lfs/h2/emc/gfstemp/emc.global/comroot/rt17_upd03_realtime   # adjust if/when used
-HEAD_ARAFS=/lfs/h2/emc/ptmp/xingren.wu/ARAFS_NRT_2025
-
+HEAD_AIGFSV1=/lfs/h1/ops/prod/com/aigfs/v1.0
+#HEAD_ARAFS=/lfs/h2/emc/ptmp/xingren.wu/ARAFS_NRT_2025
+HEAD_ARAFS=/lfs/h2/emc/ptmp/marcel.caron/data
 # Filename templates (bash will expand these; {FHR3} -> zero-padded)
 # GFSv16:
 TEMPLATE_GFSV16='{HEAD_GFSV16}/gfs.{IDATE}/{IHOUR}/atmos/gfs.t{IHOUR}z.pgrb2.0p25.f{FHR3}'
@@ -31,10 +32,13 @@ TEMPLATE_GFSV16='{HEAD_GFSV16}/gfs.{IDATE}/{IHOUR}/atmos/gfs.t{IHOUR}z.pgrb2.0p2
 TEMPLATE_GDAS='{HEAD_GDAS}/gdas.{IDATE}/{IHOUR}/atmos/gdas.t{IHOUR}z.pgrb2.0p25.anl'
 # GFSv17:
 TEMPLATE_GFSV17='{HEAD_GFSV17}/gfs.{IDATE}/{IHOUR}/products/atmos/grib2/0p25/gfs.t{IHOUR}z.pgrb2.0p25.f{FHR3}'
+# AIGFS:
+TEMPLATE_AIGFSV1_PRES='{HEAD_AIGFSV1}/aigfs.{IDATE}/{IHOUR}/model/atmos/grib2/aigfs.t{IHOUR}z.pres.f{FHR3}.grib2'
+TEMPLATE_AIGFSV1_SFC='{HEAD_AIGFSV1}/aigfs.{IDATE}/{IHOUR}/model/atmos/grib2/aigfs.t{IHOUR}z.sfc.f{FHR3}.grib2'
 # ARAFS:
-TEMPLATE_ARAFS='{HEAD_ARAFS}/{IDATE}{IHOUR}/00E/{IDATE}{IHOUR}.arafs.parent.atm.f{FHR3}.grb2'
+TEMPLATE_ARAFS='{HEAD_ARAFS}/arafs.{IDATE}/arafs.{IDATE}{IHOUR}.f{FHR3}.grb2'
 
 # Plot style / options
-QUIVER_STRIDE=10          # thin wind vectors (grid stride)
+QUIVER_STRIDE=${QUIVER_STRIDE}          # thin wind vectors (grid stride)
 SLP_CONTOURS="980 996 1004 1012 1020 1028 1036"  # hPa labels (optional)
 BOOL_ANALYSIS=${BOOL_ANL}

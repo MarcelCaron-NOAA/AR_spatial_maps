@@ -317,13 +317,13 @@ def compute_iwv(gf, pmin_mb=1000, pmax_mb=200, g=9.80665):
 def fetch_slp(gf):
     """
     Return 2-D array of mean-sea-level pressure (hPa) and the units string.
-    Prefers PRMSL, falls back to MSLET.  Raises RuntimeError if neither exist.
+    Prefers MSLET, falls back to PRMSL.  Raises RuntimeError if neither exist.
     """
-    # Try PRMSL first
-    out = read_msgs_by_name_and_level(gf, "PRMSL")
+
+    # Try MSLET next
+    out = read_msgs_by_name_and_level(gf, "MSLET")
     if out:
         slp = list(out.values())[0]
-        # GFS PRMSL is in Pa → convert to hPa
         if np.nanmedian(slp) > 5e4:
             slp = slp / 100.0
             units = "hPa"
@@ -331,10 +331,11 @@ def fetch_slp(gf):
             units = "Pa"
         return slp, units
 
-    # Try MSLET next
-    out = read_msgs_by_name_and_level(gf, "MSLET")
+    # Try PRMSL first
+    out = read_msgs_by_name_and_level(gf, "PRMSL")
     if out:
         slp = list(out.values())[0]
+        # GFS PRMSL is in Pa → convert to hPa
         if np.nanmedian(slp) > 5e4:
             slp = slp / 100.0
             units = "hPa"
@@ -411,6 +412,7 @@ def choose_quiver_stride(model: str, user_qs: int = None, nx: int = None, ny: in
     defaults = {
         "gfsv16": 5,       # 0.25° grid -> denser, so smaller stride
         "gfsv17": 5,    
+        "aigfsv1": 5,    
         "gdas": 5,    
         "arafs": 83,       # finer grid -> larger stride (thin more)
     }

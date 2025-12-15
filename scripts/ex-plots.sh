@@ -25,6 +25,9 @@ source "$CFG"
 
 mkdir -p "${COMOUT}" "${TMP}"
 
+TEMPLATE_SFC_RAW=""
+SFC_FILE_PATH=""
+
 # 3) Time logic
 # Seed both pairs from the provided DATE/HOUR (from config)
 IDATE="$DATE"; IHOUR="$HOUR"
@@ -58,9 +61,14 @@ FHR3=$(printf "%03d" "${FHR}")
 VAR_LC=$(echo "${VAR}" | tr '[:upper:]' '[:lower:]')
 
 # --- Build FILE_TEMPLATE (meteograms need it; safe for all vars) ---
+TEMPLATE_SFC_RAW=""
 case "${MODEL}" in
   gfsv16) TEMPLATE_RAW="${TEMPLATE_GFSV16}";;
   gfsv17) TEMPLATE_RAW="${TEMPLATE_GFSV17}";;
+  aigfsv1) 
+      TEMPLATE_RAW="${TEMPLATE_AIGFSV1_PRES}"
+      TEMPLATE_SFC_RAW="${TEMPLATE_AIGFSV1_SFC}"
+      ;;
   gdas)   TEMPLATE_RAW="${TEMPLATE_GDAS}";;
   arafs)  TEMPLATE_RAW="${TEMPLATE_ARAFS}";;
   *) echo "Unsupported MODEL=${MODEL}" >&2; exit 3;;
@@ -71,6 +79,7 @@ FILE_TEMPLATE="${TEMPLATE_RAW//\{IDATE\}/$IDATE}"
 FILE_TEMPLATE="${FILE_TEMPLATE//\{IHOUR\}/$IHOUR}"
 FILE_TEMPLATE="${FILE_TEMPLATE//\{HEAD_GFSV16\}/$HEAD_GFSV16}"
 FILE_TEMPLATE="${FILE_TEMPLATE//\{HEAD_GFSV17\}/$HEAD_GFSV17}"
+FILE_TEMPLATE="${FILE_TEMPLATE//\{HEAD_AIGFSV1\}/$HEAD_AIGFSV1}"
 FILE_TEMPLATE="${FILE_TEMPLATE//\{HEAD_GDAS\}/$HEAD_GDAS}"
 FILE_TEMPLATE="${FILE_TEMPLATE//\{HEAD_ARAFS\}/$HEAD_ARAFS}"
 
@@ -80,6 +89,19 @@ if [[ "${VAR_LC}" != "meteogram" ]]; then
         echo "GRIB2 file missing: ${FILE_PATH}" >&2; exit 4
     fi
 fi
+
+if [[ -n "${TEMPLATE_SFC_RAW:-}" ]]; then
+    SFC_FILE_TEMPLATE="${TEMPLATE_SFC_RAW//\{IDATE\}/$IDATE}"
+    SFC_FILE_TEMPLATE="${SFC_FILE_TEMPLATE//\{IHOUR\}/$IHOUR}"
+    SFC_FILE_TEMPLATE="${SFC_FILE_TEMPLATE//\{HEAD_AIGFSV1\}/$HEAD_AIGFSV1}"
+    if [[ "${VAR_LC}" != "meteogram" ]]; then
+        SFC_FILE_PATH="${SFC_FILE_TEMPLATE//\{FHR3\}/$FHR3}"
+        if [[ ! -s "${SFC_FILE_PATH}" ]]; then
+            echo "Surface GRIB2 file missing: ${SFC_FILE_PATH}" >&2; exit 4
+        fi
+    fi
+fi
+
 
 # 5) Hand off to plotting shell wrapper (plugin per VAR)
 PLOT_SH="${TOPDIR}/ush/plot_${VAR_LC}.sh"
@@ -93,6 +115,11 @@ elif [[ -x "${GENERIC_SH}" ]]; then
 else
   echo "ERROR: No plotting wrapper found for VAR=${VAR} (expected ${PLOT_SH##*/} or plot_generic.sh)" >&2
   exit 5
+fi
+
+EXTRA_SLP_ARGS=()
+if [[ -n "${SFC_FILE_PATH}" ]]; then
+    EXTRA_SLP_ARGS+=( --sfc-file "${SFC_FILE_PATH}" )
 fi
 
 if [[ "${VAR_LC}" == "meteogram" ]]; then
@@ -124,5 +151,6 @@ else
       --fix "${FIX}" \
       --quiver-stride "${QUIVER_STRIDE}" \
       --slp-contours "${SLP_CONTOURS}" \
-      --bool_analysis "${BOOL_ANALYSIS}"
+      --bool_analysis "${BOOL_ANALYSIS}" \
+      "${EXTRA_SLP_ARGS[@]}"
 fi

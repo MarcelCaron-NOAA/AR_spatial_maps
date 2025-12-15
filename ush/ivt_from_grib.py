@@ -34,6 +34,8 @@ def main():
     ap.add_argument("--home", default=os.getenv("HOME", ""))
     ap.add_argument("--comout", default=None)
     ap.add_argument("--fix", default="")
+    ap.add_argument("--sfc-file", default=None,
+                help="Optional surface GRIB2 file to read SLP (PRMSL/MSLET) from.")
 
     args = ap.parse_args()
 
@@ -54,8 +56,15 @@ def main():
     IVTu, IVTv, IVT, (LON, LAT) = util.compute_ivt(gf, pmin_mb=1000, pmax_mb=200)
 
     # Optional SLP for contours
+    SLP = None
+    slp_units = None
     try:
-        SLP, slp_units = util.fetch_slp(gf)
+        if args.sfc_file:
+            gf_sfc = grib2io.open(args.sfc_file, mode="r")
+            SLP, slp_units = util.fetch_slp(gf_sfc)
+            gf_sfc.close()
+        else:
+            SLP, slp_units = util.fetch_slp(gf)
     except Exception:
         pass
 
