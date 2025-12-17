@@ -27,6 +27,7 @@ echo
 export DAY=${DAY:-01}
 export FHOUR=${FHOUR:-24}
 export VARIABLE=${VARIABLE:-IVT}
+export QUIVER_STRIDE=${QUIVER_STRIDE:-"83"}
 
 # Run the plotting driver with your config
 bash scripts/ex-plots.sh parm/config.gaea.default
