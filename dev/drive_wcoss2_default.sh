@@ -27,6 +27,7 @@ export FHOUR=${FHOUR:-24}
 export VARIABLE=${VARIABLE:-IVT}
 export MOD=${MOD:-gfsv16}
 export BOOL_ANL=${BOOL_ANL:-FALSE}
+export QUIVER_STRIDE=${QUIVER_STRIDE:-10}
 
 # Run the plotting driver with your config
 bash scripts/ex-plots.sh parm/config.wcoss2.default
