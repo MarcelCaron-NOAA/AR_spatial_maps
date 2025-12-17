@@ -7,6 +7,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.gridspec import GridSpec
+from matplotlib.ticker import ScalarFormatter
 from datetime import datetime, timedelta
 
 import plot_util as util
@@ -26,25 +27,53 @@ def parse_fhrs(s):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", required=True)
+    ap.add_argument("--models", required=True, help="Comma list: arafs,gfsv16,aigfsv1")
     ap.add_argument("--date-type", required=True, choices=["INIT", "VALID"])
     ap.add_argument("--idate", required=True)   # YYYYmmdd
     ap.add_argument("--ihour", required=True)   # HH
-    ap.add_argument("--vdate", required=True)   # YYYYmmdd
-    ap.add_argument("--vhour", required=True)   # HH
     ap.add_argument("--fhrs", required=True, help="e.g. 0-72:3 or 0,6,12,18")
-    ap.add_argument("--file-template", required=True,
-                    help="Template with {FHR3} substituted (and anything else you want).")
+
+    # Per-model file templates (must contain {FHR3})
+    ap.add_argument("--template-arafs", default="")
+    ap.add_argument("--template-gfsv16", default="")
+    ap.add_argument("--template-gfsv17", default="")
+    ap.add_argument("--template-gdas", default="")
+    ap.add_argument("--template-aigfsv1-pres", default="")
+    ap.add_argument("--template-aigfsv1-sfc", default="")   # optional (APCP/SLP live here sometimes)
+
     ap.add_argument("--lat", type=float, required=True)
-    ap.add_argument("--lon", type=float, required=True)  # degrees east or west ok (we normalize)
+    ap.add_argument("--lon", type=float, required=True)
     ap.add_argument("--out", required=False)
     ap.add_argument("--comout", required=False)
     ap.add_argument("--fix", default="")
-    ap.add_argument("--title", default="")  # optional override
-    ap.add_argument("--home", default=None)
-    ap.add_argument("--tmp", default=None)
+    ap.add_argument("--title", default="")
+    ap.add_argument("--tmp", default="/tmp")
+    ap.add_argument("--home", default=os.getenv("HOME", ""))
 
     args = ap.parse_args()
+    models = [m.strip().lower() for m in args.models.split(",") if m.strip()]
+    if not models:
+        raise ValueError("No models provided to --models")
+    if len(models) > 3:
+        print("[meteogram] More than 3 models requested; plotting only first 3 RH panels.")
+    models_rh = models[:3]   # RH panels max
+
+    tmpl = {}
+
+    if args.template_arafs:  tmpl["arafs"]  = {"main": args.template_arafs}
+    if args.template_gfsv16: tmpl["gfsv16"] = {"main": args.template_gfsv16}
+    if args.template_gfsv17: tmpl["gfsv17"] = {"main": args.template_gfsv17}
+    if args.template_gdas:   tmpl["gdas"]   = {"main": args.template_gdas}
+
+    if args.template_aigfsv1_pres:
+        tmpl["aigfsv1"] = {"main": args.template_aigfsv1_pres}
+        if args.template_aigfsv1_sfc:
+            tmpl["aigfsv1"]["sfc"] = args.template_aigfsv1_sfc
+
+    for model in models:
+        if model not in tmpl:
+            raise ValueError(f"No template provided for model '{model}'")
+    
     outdir = args.out or args.comout
     if not outdir:
         ap.error("One of --out or --comout is required")
@@ -56,133 +85,242 @@ def main():
     init_dt = datetime.strptime(args.idate + args.ihour, "%Y%m%d%H")
     valid_dts = [init_dt + timedelta(hours=int(f)) for f in fhrs]
 
-    # Storage
-    ivt = []
-    iwv = []
-    apcp = []
-    rh_prof_list = []
-    p_levels_hpa = None
+    fhrs = parse_fhrs(args.fhrs)
+    init_dt = datetime.strptime(args.idate + args.ihour, "%Y%m%d%H")
+    valid_dts = [init_dt + timedelta(hours=int(f)) for f in fhrs]
 
-    # Loop files
-    for f in fhrs:
-        f3 = f"{int(f):03d}"
-        fpath = args.file_template.replace("{FHR3}", f3)
-        if not os.path.exists(fpath):
-            raise FileNotFoundError(f"Missing GRIB: {fpath}")
+    # Choose a consistent lon convention for sampling
+    lon_samp = util.normalize_lon_180(args.lon)
 
-        gf = grib2io.open(fpath, mode="r")
+    # First pass: determine a common set of RH pressure levels across the models we will RH-plot
+    common_p = None
+    ij_by_model = {}
 
-        # ---- RH time-height (isobaric) ----
-        rh_by = util.read_msgs_by_name_and_level(gf, "RH")  # dict: "850 mb" -> 2D
-        # keep only pressure levels we can parse
+    for model in models_rh:
+        f0 = f"{int(fhrs[0]):03d}"
+        fpath0 = tmpl[model]["main"].replace("{FHR3}", f0)
+        gf0 = grib2io.open(fpath0, mode="r")
+
+        rh_by = util.read_msgs_by_name_and_level(gf0, "RH")  # {"850 mb": 2D, ...}
         lev_pairs = []
         for lbl in rh_by.keys():
-            p = util._parse_mb(lbl)  # you already have this pattern in your codebase
+            p = util._parse_mb(lbl)
             if p is not None:
                 lev_pairs.append((lbl, p))
-        lev_pairs.sort(key=lambda t: t[1], reverse=True)  # 1000..200
+        if not lev_pairs:
+            raise RuntimeError(f"{model}: No RH pressure levels found.")
 
-        if p_levels_hpa is None:
-            p_levels_hpa = np.array([p for _, p in lev_pairs], dtype=float)
+        # Build set of pressures for this model
+        pset = set([p for _lbl, p in lev_pairs])
 
-        # point sample RH at each level
-        # use a representative message for grid mapping
+        if common_p is None:
+            common_p = pset
+        else:
+            common_p = common_p.intersection(pset)
+
+        # Compute sampling i,j for THIS model (grid may differ by model)
+        # Pick one RH message as reference
         ref_lbl = lev_pairs[0][0]
-        ref_msg = util.read_msgs_by_name_and_level(gf, "RH", return_msgs=True)[ref_lbl]
-        j, i = util.ij_from_latlon_regular_ll(ref_msg, args.lat, args.lon)
+        ref_msg = util.read_msgs_by_name_and_level(gf0, "RH", return_msgs=True)[ref_lbl]
+        j, i = util.ij_from_latlon_regular_ll(ref_msg, args.lat, lon_samp)
+        ij_by_model[model] = (j, i)
 
-        rh_prof = np.array([rh_by[lbl][j, i] for lbl, _p in lev_pairs], dtype=float)
-        rh_prof_list.append(rh_prof)
+        gf0.close()
 
-        # ---- IWV + IVT point values ----
-        # Use your proven “dp>0” approach but do it at a point
-        ivt_val, iwv_val = util.compute_ivt_iwv_point(gf, j, i, pmin_mb=1000, pmax_mb=200)
-        ivt.append(ivt_val)
-        iwv.append(iwv_val)
+    if not common_p:
+        raise RuntimeError("No common RH pressure levels across models. (intersection empty)")
 
-        # ---- Precip (start simple: accumulated APCP at surface) ----
-        # Later you can compute increments / rates by differencing.
-        apcp_val = util.fetch_apcp_surface_point(gf, j, i)
-        apcp.append(apcp_val)
+    p_levels_hpa = np.array(sorted(list(common_p), reverse=True), dtype=float)  # 1000..200-ish
 
-        gf.close()
 
-    rh_timeheight = np.vstack(rh_prof_list)  # (T, L)
-    ivt = np.array(ivt, dtype=float)
-    iwv = np.array(iwv, dtype=float)
-    apcp = np.array(apcp, dtype=float)
+    # Now the real loop
+    series = {}
+    for model in models:
+        ivt = []; iwv = []; apcp = []
+        rh_prof_list = []  # only if model in models_rh
+
+        # get (j,i) if we precomputed it; otherwise compute on first file
+        ji = ij_by_model.get(model, None)
+
+        for f in fhrs:
+            f3 = f"{int(f):03d}"
+            fpath = tmpl[model]["main"].replace("{FHR3}", f3)
+            if not os.path.exists(fpath):
+                raise FileNotFoundError(f"Missing GRIB: {fpath}")
+
+            gf = grib2io.open(fpath, mode="r")
+
+            # compute ij once if needed
+            if ji is None:
+                rh_msgs = util.read_msgs_by_name_and_level(gf, "RH", return_msgs=True)
+                if not rh_msgs:
+                    raise RuntimeError(f"{model}: need RH to compute ij, but RH not found.")
+                ref_lbl = list(rh_msgs.keys())[0]
+                ref_msg = rh_msgs[ref_lbl]
+                ji = util.ij_from_latlon_regular_ll(ref_msg, args.lat, lon_samp)
+            j, i = ji
+
+            # RH time-height (only for models_rh)
+            if model in models_rh:
+                rh_by = util.read_msgs_by_name_and_level(gf, "RH")  # "850 mb" -> 2D
+                # build p->value dict at point
+                rh_p = {}
+                for lbl, arr in rh_by.items():
+                    p = util._parse_mb(lbl)
+                    if p is not None:
+                        rh_p[p] = float(arr[j, i])
+
+                # vector on common pressure grid (missing -> nan)
+                rh_prof = np.array([rh_p.get(p, np.nan) for p in p_levels_hpa], dtype=float)
+                rh_prof_list.append(rh_prof)
+
+            # IVT/IWV point values (from main file)
+            ivt_val, iwv_val = util.compute_ivt_iwv_point(gf, j, i, pmin_mb=1000, pmax_mb=200)
+            ivt.append(ivt_val); iwv.append(iwv_val)
+
+            # APCP: if model has a separate sfc file, read from it
+            if "sfc" in tmpl.get(model, {}):
+                sfc_path = tmpl[model]["sfc"].replace("{FHR3}", f3)
+                gf_sfc = grib2io.open(sfc_path, mode="r")
+                apcp_val = util.fetch_apcp_surface_point(gf_sfc, j, i)
+                gf_sfc.close()
+            else:
+                apcp_val = util.fetch_apcp_surface_point(gf, j, i)
+            apcp.append(apcp_val)
+
+            gf.close()
+
+        series[model] = {
+            "ivt": np.array(ivt, float),
+            "iwv": np.array(iwv, float),
+            "apcp": np.array(apcp, float),
+        }
+        if model in models_rh:
+            series[model]["rh"] = np.vstack(rh_prof_list)  # (T,L)
 
     # ===== Plot =====
-    fig = plt.figure(figsize=(10, 10), dpi=150)
-    gs = GridSpec(nrows=3, ncols=1, height_ratios=[3.0, 1.4, 1.8], hspace=0.22)
+    n_rh = len(models_rh)
+    fig = plt.figure(figsize=(10, 3.4*n_rh + 4.0), dpi=150)
 
-    # ---- Panel 1: RH time-height ----
-    ax1 = fig.add_subplot(gs[0])
+    # RH panels + precip + IVT/IWV
+    gs = GridSpec(
+        nrows=n_rh + 2, ncols=1,
+        height_ratios=[3.0]*n_rh + [1.2, 1.6],
+        hspace=0.22
+    )
+
     T = mdates.date2num(valid_dts)
+    TT, PP = np.meshgrid(T, p_levels_hpa)
 
-    # RH colormap: use your dicts if you have it; fallback if not.
+    # RH colormap
     try:
         cmap, norm, bnds, ticks, lbl, _units = dicts.cmaps("rh")
         levels = bnds
     except Exception:
         cmap = "YlGn"
+        norm = None
         levels = np.arange(10, 101, 10)
+    cmap.set_under("white")
 
-    # Need meshgrid in (time, pressure)
-    TT, PP = np.meshgrid(T, p_levels_hpa)
-    # contourf expects (ny,nx); we have rh (T,L) so transpose to (L,T)
-    cf = ax1.contourf(TT, PP, rh_timeheight.T, levels=levels, cmap=cmap, extend="max")
+    rh_axes = []
+    cf_last = None
 
-    ax1.set_yscale("log")
-    ax1.invert_yaxis()
-    ax1.set_ylabel("Pressure (hPa)")
-    ax1.set_ylim(np.nanmax(p_levels_hpa), np.nanmin(p_levels_hpa))
+    for k, model in enumerate(models_rh):
+        ax = fig.add_subplot(gs[k], sharex=rh_axes[0] if rh_axes else None)
+        rh_axes.append(ax)
 
-    # Pressure ticks: pick a standard set and only show those in range
-    stdp = np.array([1000, 925, 850, 700, 500, 300, 250, 200], dtype=float)
-    stdp = stdp[(stdp <= np.nanmax(p_levels_hpa)) & (stdp >= np.nanmin(p_levels_hpa))]
-    ax1.set_yticks(stdp)
-    ax1.get_yaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
-    ax1.set_yticklabels([f"{int(p)}" for p in stdp])
+        rh_timeheight = series[model]["rh"]  # (T,L)
+        cf = ax.contourf(
+            TT, PP, rh_timeheight.T,
+            levels=levels, cmap=cmap, norm=norm,
+            extend="min"
+        )
+        cf_last = cf
 
-    cbar = fig.colorbar(cf, ax=ax1, orientation="horizontal", pad=0.08, fraction=0.08)
+        ax.set_yscale("log")
+        ax.invert_yaxis()
+        ax.set_ylim(1000, 200)
+        ax.set_ylabel("Pressure (hPa)")
+        ax.set_title(f"RH Time–Height: {model.upper()}", loc="left")
+
+        # pressure ticks
+        stdp = np.array([1000, 925, 850, 700, 500, 300, 250, 200], dtype=float)
+        ax.set_yticks(stdp)
+        sf = ScalarFormatter()
+        sf.set_scientific(False)
+        sf.set_useOffset(False)
+        ax.yaxis.set_major_formatter(sf)
+        ax.get_yaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
+        ax.set_yticklabels([f"{int(p)}" for p in stdp])
+
+        #if k < n_rh - 1:
+        #    plt.setp(ax.get_xticklabels(), visible=False)
+        plt.setp(ax.get_xticklabels(), visible=False)
+
+    # --- shared RH colorbar on RHS spanning ALL RH panels ---
+    bbox_top = rh_axes[0].get_position()
+    bbox_bot = rh_axes[-1].get_position()
+    cax_pad = 0.015
+    cax_width = 0.010  # ~half-thin vs your 0.015
+    cax = fig.add_axes([
+        bbox_top.x1 + cax_pad,
+        bbox_bot.y0,
+        cax_width,
+        bbox_top.y1 - bbox_bot.y0
+    ])
+    cbar = fig.colorbar(cf_last, cax=cax, orientation="vertical", ticks=ticks)
     cbar.set_label("RH (%)")
+    
+    for ax in rh_axes:
+        ax.tick_params(labelbottom=False)
 
-    # ---- Panel 2: Precip ----
-    ax2 = fig.add_subplot(gs[1], sharex=ax1)
-    ax2.plot(valid_dts, apcp, linewidth=1.5)
-    ax2.set_ylabel("APCP (mm)")
-    ax2.grid(True, alpha=0.25)
-    ax2.set_title(f"Total Precip = {float(np.nanmax(apcp)):.2f} mm", loc="right")
+    # ---- Panel: Precip (multi-model) ----
+    axp = fig.add_subplot(gs[n_rh], sharex=rh_axes[0])
+    axp.grid(True, alpha=0.25)
+    axp.set_ylabel("APCP (mm)")
 
-    # ---- Panel 3: IVT + IWV ----
-    ax3 = fig.add_subplot(gs[2], sharex=ax1)
-    ax3.plot(valid_dts, iwv, linewidth=1.8)  # IWV left
-    ax3.set_ylabel("IWV (mm)")
+    
+    for model in models:
+        col = dicts.model_colors(model)
+        axp.plot(valid_dts, series[model]["apcp"], linewidth=1.4, label=model.upper(), color=col)
+
+    axp.legend(loc="upper left", ncol=min(3, len(models)), fontsize=9)
+    plt.setp(axp.get_xticklabels(), visible=False)
+    axp.tick_params(labelbottom=False)
+
+
+    # ---- Panel: IVT + IWV (multi-model) ----
+    ax3 = fig.add_subplot(gs[n_rh + 1], sharex=rh_axes[0])
     ax3.grid(True, alpha=0.25)
+    ax3.set_ylabel("IWV (mm)")
 
     ax3r = ax3.twinx()
-    ax3r.plot(valid_dts, ivt, linewidth=1.5)  # IVT right
     ax3r.set_ylabel(r"IVT (kg m$^{-1}$ s$^{-1}$)")
+    ax3r.axhline(250, color="0.5", linestyle=":", linewidth=1.0, zorder=0)
 
-    ax3.set_title(f"Max IVT/IWV = {np.nanmax(ivt):.0f} / {np.nanmax(iwv):.0f}", loc="left")
+    for model in models:
+        col = dicts.model_colors(model)
+        ax3.plot(valid_dts, series[model]["iwv"], linewidth=1.4, linestyle="--", color=col)
+        ax3r.plot(valid_dts, series[model]["ivt"], linewidth=1.4, linestyle="-",  color=col)
+
+    ax3.set_title("IVT (solid) and IWV (dashed) by model", loc="left")
+
 
     # ---- Time axis formatting ----
-    ax3.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d\n%H%M"))
+    ax3.xaxis.set_major_formatter(mdates.DateFormatter("%b %d\n%HZ"))
     ax3.xaxis.set_major_locator(mdates.HourLocator(interval=max(6, int((len(valid_dts) / 10) * 6))))
-    plt.setp(ax1.get_xticklabels(), visible=False)
-    plt.setp(ax2.get_xticklabels(), visible=False)
+    ax3.tick_params(labelbottom=True)
 
-    # Main title
     lat = args.lat
     lon = util.normalize_lon_180(args.lon)
-    title = args.title.strip() if args.title.strip() else f"{args.model.upper()} Meteogram | {lat:.2f}N {abs(lon):.2f}{'W' if lon < 0 else 'E'}"
-    fig.suptitle(title + "\n" + f"Initialized: {args.ihour}Z {args.idate} | Valid start: {valid_dts[0].strftime('%HZ %Y%m%d')}", y=0.98)
+    title = args.title.strip() if args.title.strip() else f"Meteogram | {lat:.2f}N {abs(lon):.2f}{'W' if lon<0 else 'E'}"
+    fig.suptitle(title + "\n" + f"Initialized: {args.ihour}Z {args.idate}", y=0.995)
+
 
     # Output
     datedir = os.path.join(outdir, args.idate)
     os.makedirs(datedir, exist_ok=True)
-    ofn = os.path.join(datedir, f"meteogram.{args.model}.{args.idate}{args.ihour}.{lat:.2f}_{lon:.2f}.png")
+    ofn = os.path.join(datedir, f"meteogram.{args.idate}{args.ihour}.{lat:.2f}_{lon:.2f}.png")
     fig.savefig(ofn, bbox_inches="tight")
     plt.close(fig)
     print(f"New image created: {ofn}")

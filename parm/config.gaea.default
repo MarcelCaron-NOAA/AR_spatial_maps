@@ -6,7 +6,7 @@ DATE_TYPE=INIT           # INIT | VALID
 DATE=${YEAR}${MONTH}${DAY}            # YYYYMMDD
 HOUR=${IHOUR}                  # HH (00-23)
 FHR=${FHOUR}                   # integer hours; used for spatial maps
-FHRS="0-120:3"                 # integer hours in format "START-END:INCREMENT"; used for meteograms
+FHRS=${FHRS:-"0-120:3"}                 # integer hours in format "START-END:INCREMENT"; used for meteograms
 
 # What to plot
 MODEL=arafs             # gfsv16 | gfsv17 | arafs

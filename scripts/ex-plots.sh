@@ -56,6 +56,7 @@ echo "MODEL=${MODEL} FHR=${FHR}"
 echo "INIT:  ${IDATE} ${IHOUR}Z"
 echo "VALID: ${VDATE} ${VHOUR}Z"
 
+MET_MODELS="${MET_MODELS:-$MODEL}"
 FHR3=$(printf "%03d" "${FHR}")
 
 VAR_LC=$(echo "${VAR}" | tr '[:upper:]' '[:lower:]')
@@ -77,11 +78,15 @@ esac
 # Expand everything except {FHR3}; leave {FHR3} for later substitution
 FILE_TEMPLATE="${TEMPLATE_RAW//\{IDATE\}/$IDATE}"
 FILE_TEMPLATE="${FILE_TEMPLATE//\{IHOUR\}/$IHOUR}"
-FILE_TEMPLATE="${FILE_TEMPLATE//\{HEAD_GFSV16\}/$HEAD_GFSV16}"
-FILE_TEMPLATE="${FILE_TEMPLATE//\{HEAD_GFSV17\}/$HEAD_GFSV17}"
-FILE_TEMPLATE="${FILE_TEMPLATE//\{HEAD_AIGFSV1\}/$HEAD_AIGFSV1}"
-FILE_TEMPLATE="${FILE_TEMPLATE//\{HEAD_GDAS\}/$HEAD_GDAS}"
-FILE_TEMPLATE="${FILE_TEMPLATE//\{HEAD_ARAFS\}/$HEAD_ARAFS}"
+
+case "${MODEL}" in
+  gfsv16) FILE_TEMPLATE="${FILE_TEMPLATE//\{HEAD_GFSV16\}/$HEAD_GFSV16}" ;;
+  gfsv17) FILE_TEMPLATE="${FILE_TEMPLATE//\{HEAD_GFSV17\}/$HEAD_GFSV17}" ;;
+  gdas)   FILE_TEMPLATE="${FILE_TEMPLATE//\{HEAD_GDAS\}/$HEAD_GDAS}" ;;
+  arafs)  FILE_TEMPLATE="${FILE_TEMPLATE//\{HEAD_ARAFS\}/$HEAD_ARAFS}" ;;
+  aigfsv1)FILE_TEMPLATE="${FILE_TEMPLATE//\{HEAD_AIGFSV1\}/$HEAD_AIGFSV1}" ;;
+  *) echo "Unsupported MODEL=${MODEL}" >&2; exit 3 ;;
+esac
 
 if [[ "${VAR_LC}" != "meteogram" ]]; then
     FILE_PATH="${FILE_TEMPLATE//\{FHR3\}/$FHR3}"
@@ -90,7 +95,7 @@ if [[ "${VAR_LC}" != "meteogram" ]]; then
     fi
 fi
 
-if [[ -n "${TEMPLATE_SFC_RAW:-}" ]]; then
+if [[ "${MODEL}" == "aigfsv1" && -n "${TEMPLATE_SFC_RAW:-}" ]]; then
     SFC_FILE_TEMPLATE="${TEMPLATE_SFC_RAW//\{IDATE\}/$IDATE}"
     SFC_FILE_TEMPLATE="${SFC_FILE_TEMPLATE//\{IHOUR\}/$IHOUR}"
     SFC_FILE_TEMPLATE="${SFC_FILE_TEMPLATE//\{HEAD_AIGFSV1\}/$HEAD_AIGFSV1}"
@@ -102,6 +107,19 @@ if [[ -n "${TEMPLATE_SFC_RAW:-}" ]]; then
     fi
 fi
 
+expand_template_keep_fhr3() {
+    local s="$1"
+    s="${s//\{IDATE\}/$IDATE}"
+    s="${s//\{IHOUR\}/$IHOUR}"
+
+    s="${s//\{HEAD_ARAFS\}/${HEAD_ARAFS:-}}"
+    s="${s//\{HEAD_GFSV16\}/${HEAD_GFSV16:-}}"
+    s="${s//\{HEAD_GFSV17\}/${HEAD_GFSV17:-}}"
+    s="${s//\{HEAD_GDAS\}/${HEAD_GDAS:-}}"
+    s="${s//\{HEAD_AIGFSV1\}/${HEAD_AIGFSV1:-}}"
+
+    echo "$s"
+}
 
 # 5) Hand off to plotting shell wrapper (plugin per VAR)
 PLOT_SH="${TOPDIR}/ush/plot_${VAR_LC}.sh"
@@ -123,18 +141,27 @@ if [[ -n "${SFC_FILE_PATH}" ]]; then
 fi
 
 if [[ "${VAR_LC}" == "meteogram" ]]; then
+   METE_MODELS="${MODELS:-${MODEL}}"
+
+   METE_ARGS=()
+   [[ -n "${TEMPLATE_ARAFS:-}" ]]        && METE_ARGS+=( --template-arafs "$(expand_template_keep_fhr3 "${TEMPLATE_ARAFS}")" )
+   [[ -n "${TEMPLATE_GFSV16:-}" ]]       && METE_ARGS+=( --template-gfsv16 "$(expand_template_keep_fhr3 "${TEMPLATE_GFSV16}")" )
+   [[ -n "${TEMPLATE_GFSV17:-}" ]]       && METE_ARGS+=( --template-gfsv17 "$(expand_template_keep_fhr3 "${TEMPLATE_GFSV17}")" )
+   [[ -n "${TEMPLATE_GDAS:-}" ]]         && METE_ARGS+=( --template-gdas "$(expand_template_keep_fhr3 "${TEMPLATE_GDAS}")" )
+   [[ -n "${TEMPLATE_AIGFSV1_PRES:-}" ]] && METE_ARGS+=( --template-aigfsv1-pres "$(expand_template_keep_fhr3 "${TEMPLATE_AIGFSV1_PRES}")" )
+   [[ -n "${TEMPLATE_AIGFSV1_SFC:-}" ]]  && METE_ARGS+=( --template-aigfsv1-sfc "$(expand_template_keep_fhr3 "${TEMPLATE_AIGFSV1_SFC}")" )
+
    "${TARGET_SH}" \
-     --model "${MODEL}" \
+     --models "${METE_MODELS}" \
      --date-type "${DATE_TYPE}" \
      --idate "${IDATE}" --ihour "${IHOUR}" \
-     --vdate "${VDATE}" --vhour "${VHOUR}" \
      --fhrs "${FHRS}" \
-     --file-template "${FILE_TEMPLATE}" \
      --lat "${POINT_LAT}" --lon "${POINT_LON}" \
      --home "${HOME_DIR}" \
-     --comout "${COMOUT}" \
      --tmp "${TMP}" \
-     --fix "${FIX}"
+     --comout "${COMOUT}" \
+     --fix "${FIX}" \
+     "${METE_ARGS[@]}"
 else
     "${TARGET_SH}" \
       --model "${MODEL}" \

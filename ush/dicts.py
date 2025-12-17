@@ -4,6 +4,17 @@ import matplotlib.colors as mcolors
 from matplotlib.colors import ListedColormap
 import cartopy.crs as ccrs
 
+def model_colors(model):
+    # simple model colors (you can move to dicts later)
+    mod_colors = {
+        "arafs": "tab:blue",
+        "gfsv16": "tab:black",
+        "gfsv17": "tab:red",
+        "gdas": "tab:gray",
+        "aigfsv1": "tab:green",
+    }
+    return mod_colors[model]
+
 def domains(domain):
     domains = {
         'nepac': {
@@ -330,6 +341,27 @@ def cmaps(var):
                 "label":"Temperature 850-hPa ($^{{o}}$C)",
                 "units": "$^{{o}}$C",
                 },
+        "rh": {
+            # 11 colors total: 1 (white for <50) + 10 for 50–100 by 5%
+            # You can tweak these RGBs later; these are a sensible “dry→moist” ramp.
+            "colors": [
+                [230, 245, 255],  # 50–55
+                [204, 236, 230],  # 55–60
+                [153, 216, 201],  # 60–65
+                [102, 194, 164],  # 65–70
+                [65, 174, 118],   # 70–75
+                [35, 139, 69],    # 75–80
+                [0, 109, 44],     # 80–85
+                [0, 80, 34],      # 85–90
+                [0, 55, 25],      # 90–95
+                [0, 35, 15],      # 95–100
+            ],
+            # Boundaries: 11 bins => boundaries length = 12
+            "bounds": [50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100],
+            "ticks":  [50, 60, 70, 80, 90],
+            "label":  "RH (%)",
+            "units":  "%",
+        },
         "total_precipitation_mm":{
                 "colors":[[215,216,255],
                         [185,185,255],
