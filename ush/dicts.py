@@ -7,11 +7,11 @@ import cartopy.crs as ccrs
 def model_colors(model):
     # simple model colors (you can move to dicts later)
     mod_colors = {
-        "arafs": "tab:blue",
-        "gfsv16": "tab:black",
-        "gfsv17": "tab:red",
-        "gdas": "tab:gray",
-        "aigfsv1": "tab:green",
+        "arafs": "#1e3cff",
+        "gfsv16": "#000000",
+        "gfsv17": "##fb2020",
+        "gdas": "#aaaaaa",
+        "aigfsv1": "#00dc00",
     }
     return mod_colors[model]
 

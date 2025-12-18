@@ -13,6 +13,23 @@ from datetime import datetime, timedelta
 import plot_util as util
 import dicts
 
+# TEMP
+import pickle
+
+def _is_dt_like(x):
+    return isinstance(x, (datetime, np.datetime64))
+
+def _fmt_xlim(xlim):
+    a, b = xlim
+    # try interpret as matplotlib date numbers
+    try:
+        da = mdates.num2date(a)
+        db = mdates.num2date(b)
+        return f"{xlim}  (as dates: {da} .. {db})"
+    except Exception:
+        return f"{xlim}"
+# TEMP
+
 
 def parse_fhrs(s):
     # e.g. "0,3,6,9,12" or "0-72:3"
@@ -88,6 +105,11 @@ def main():
     fhrs = parse_fhrs(args.fhrs)
     init_dt = datetime.strptime(args.idate + args.ihour, "%Y%m%d%H")
     valid_dts = [init_dt + timedelta(hours=int(f)) for f in fhrs]
+    
+    print("len(valid_dts)=", len(valid_dts))
+    print("valid_dts[0],[-1]=", valid_dts[0], valid_dts[-1])
+    print("type(valid_dts[0])=", type(valid_dts[0]))
+    print("fhrs[:10]=", fhrs[:10], " ... last=", fhrs[-1], "len=", len(fhrs))
 
     # Choose a consistent lon convention for sampling
     lon_samp = util.normalize_lon_180(args.lon)
@@ -209,6 +231,9 @@ def main():
         hspace=0.22
     )
 
+    with open('/lfs/h2/emc/vpppg/noscrub/marcel.caron/test.pkl','wb') as f:
+        pickle.dump([valid_dts, p_levels_hpa], f)
+
     T = mdates.date2num(valid_dts)
     TT, PP = np.meshgrid(T, p_levels_hpa)
 
@@ -321,6 +346,56 @@ def main():
     datedir = os.path.join(outdir, args.idate)
     os.makedirs(datedir, exist_ok=True)
     ofn = os.path.join(datedir, f"meteogram.{args.idate}{args.ihour}.{lat:.2f}_{lon:.2f}.png")
+    # TEMP
+    print("\n=== DEBUG: shared-x + xlim + units ===")
+    for k, ax in enumerate(fig.axes):
+        try:
+            xlim = ax.get_xlim()
+        except Exception as e:
+            print(f"AX{k}: get_xlim failed: {e}")
+            continue
+
+        # identify what this axis shares x with
+        shared = ax.get_shared_x_axes().get_siblings(ax)
+        shared_ids = [id(a) for a in shared]
+        print(f"\nAX{k} id={id(ax)} shared_with={len(shared)-1} siblings_ids={shared_ids}")
+
+        print(f"  xlim raw: {_fmt_xlim(xlim)}")
+
+        # locator / formatter
+        loc = ax.xaxis.get_major_locator()
+        fmt = ax.xaxis.get_major_formatter()
+        print(f"  locator: {loc.__class__.__name__}  formatter: {fmt.__class__.__name__}")
+
+        # how many ticks does it want?
+        try:
+            ticks = ax.get_xticks()
+            print(f"  xticks count={len(ticks)}  sample={ticks[:5]} ... {ticks[-5:] if len(ticks)>5 else ticks}")
+        except Exception as e:
+            print(f"  get_xticks failed: {e}")
+
+        # examine a couple of artists for x-data type
+        lines = ax.get_lines()
+        if lines:
+            xd = lines[0].get_xdata()
+            if len(xd) > 0:
+                x0 = xd[0]
+                print(f"  line0 xdata type={type(x0)}  sample={x0}")
+        else:
+            print("  no Line2D on this axis")
+
+        # for QuadContourSet / PolyCollection-like (contourf), best hint is xlim above,
+        # but we can also dump collections count
+        try:
+            print(f"  collections={len(ax.collections)}")
+        except Exception:
+            pass
+
+    print("\n=== DEBUG: valid_dts summary ===")
+    print("len(valid_dts)=", len(valid_dts))
+    print("valid_dts[0],[-1]=", valid_dts[0], valid_dts[-1], "types:", type(valid_dts[0]), type(valid_dts[-1]))
+    print("mdates.date2num(valid_dts)[0],[-1]=", mdates.date2num(valid_dts[0]), mdates.date2num(valid_dts[-1]))
+    # TEMP
     fig.savefig(ofn, bbox_inches="tight")
     plt.close(fig)
     print(f"New image created: {ofn}")
