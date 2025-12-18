@@ -6,11 +6,17 @@ DATE_TYPE=INIT           # INIT | VALID
 DATE=${YEAR}${MONTH}${DAY}            # YYYYMMDD
 HOUR=${HOUR}                  # HH (00-23)
 FHR=${FHOUR}                   # integer hours
+FHRS=${FHRS:-"0-120/6"}
 
 # What to plot
 MODEL=${MOD}             # gfsv16 | gfsv17 | arafs
 VAR=${VARIABLE}                  # currently only IVT supported
 DOMAIN=nepac        # see domain map in ivt_from_grib.py
+
+# meteograms
+MET_MODELS="gfsv16,arafs"
+POINT_LAT="47.6061"  # degrees; used for meteograms
+POINT_LON="122.3328" # degrees; used for meteograms
 
 # Paths
 HOME_DIR=/lfs/h2/emc/vpppg/noscrub/${USER}/AR_spatial_maps        # top of this repo
