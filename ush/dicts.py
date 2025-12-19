@@ -5,7 +5,7 @@ from matplotlib.colors import ListedColormap
 import cartopy.crs as ccrs
 
 def model_colors(model):
-    # simple model colors (you can move to dicts later)
+    # simple model colors 
     mod_colors = {
         "arafs": "#1e3cff",
         "gfsv16": "#000000",
@@ -343,7 +343,6 @@ def cmaps(var):
                 },
         "rh": {
             # 11 colors total: 1 (white for <50) + 10 for 50–100 by 5%
-            # You can tweak these RGBs later; these are a sensible “dry→moist” ramp.
             "colors": [
                 [230, 245, 255],  # 50–55
                 [204, 236, 230],  # 55–60

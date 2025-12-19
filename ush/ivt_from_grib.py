@@ -46,13 +46,13 @@ def main():
     # ensure directory exists
     os.makedirs(outdir, exist_ok=True)
 
-    # ... build your output filename using outdir ...
+    # ... build output filename using outdir ...
     # outfile = os.path.join(outdir, f"{args.model}_{args.var}_{...}.png")
 
     # Open GRIB once for inventories
     gf = grib2io.open(args.file, mode='r')
     
-    # Compute IVT from 1000→200 mb (tweak as needed)
+    # Compute IVT from 1000→200 mb
     IVTu, IVTv, IVT, (LON, LAT) = util.compute_ivt(gf, pmin_mb=1000, pmax_mb=200)
 
     # Optional SLP for contours
@@ -127,7 +127,7 @@ def main():
             e.set_edgecolor('black')
             e.set_linewidth(0.3)
 
-    # Quivers (thin out via stride)
+    # Quivers (thinned via stride)
     qs = util.choose_quiver_stride(
         args.model, 
         user_qs=getattr(args, "quiver_stride", None)

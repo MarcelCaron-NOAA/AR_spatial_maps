@@ -28,7 +28,7 @@ def _rewind_grib(gf):
         return
     except Exception:
         pass
-    # last resort: reopen by path if available
+    # last resort
     try:
         import grib2io
         path = getattr(gf, "name", None)
@@ -52,7 +52,7 @@ def _level_label(msg):
     if isinstance(lvl, str) and lvl.strip():
         return lvl.strip()
 
-    # Build from type/value/unit if available (as in your Section 4 dump)
+    # Build from type/value/unit if available
     tfs  = _get_attr(msg, "typeOfFirstFixedSurface", default=None)
     ufs  = _get_attr(msg, "unitOfFirstFixedSurface", default=None)  # e.g., 'Pa' or 'mb'
     vfs  = _get_attr(msg, "valueOfFirstFixedSurface", default=None)
@@ -84,7 +84,7 @@ def _level_label(msg):
             return "isobaric"
         if tfs == 10:  # Entire atmosphere (column)
             return "entire atmosphere (considered as a single layer)"
-        if tfs == 103:  # Spec height above MSL (gpm) – uncommon in your files
+        if tfs == 103:  # Spec height above MSL (gpm)
             return f"{int(float(vfs))} gpm" if vfs is not None else "height(msl)"
         if tfs == 107:  # Hybrid level, etc.
             return "hybrid"
@@ -193,7 +193,6 @@ def read_msgs_by_name_and_level(gf, var_name, want_levels=None, casefold=True, r
                         continue
                 target[lvl] = data if data is not None else msg  # last-ditch: keep msg
         except Exception as e:
-            # Robust: just skip bad messages, but leave a breadcrumb if you’re debugging
             # print(f"SKIP msg due to error: {e}", file=sys.stderr)
             continue
 
@@ -237,7 +236,6 @@ def compute_ivt(gf, pmin_mb=1000, pmax_mb=200, g=9.80665):
     Us    = np.array([u_by[lbl] for lbl, _ in flist])        # (L,ny,nx)
     Vs    = np.array([v_by[lbl] for lbl, _ in flist])        # (L,ny,nx)
 
-    # *** key change: sort to ASCENDING pressure so dp > 0 ***
     order = np.argsort(Ps_mb)                                # low→high index order
     Ps_pa = Ps_mb[order].astype(float) * 100.0               # (L,)
     Qs, Us, Vs = Qs[order], Us[order], Vs[order]
@@ -268,7 +266,6 @@ def compute_ivt(gf, pmin_mb=1000, pmax_mb=200, g=9.80665):
         pass
 
     # reference grid from a U message at any included level
-    # (use the first item in flist AFTER reordering)
     ref_lbl = flist[order[0]][0]
     ref_msg = read_msgs_by_name_and_level(gf, "UGRD", return_msgs=True)[ref_lbl]
     LON, LAT = _latlon_from_msg(ref_msg)
@@ -280,7 +277,6 @@ def compute_iwv(gf, pmin_mb=1000, pmax_mb=200, g=9.80665):
     Sign-safe: integrates with ascending pressure so dp > 0.
     Returns IWV_mm, (LON, LAT)
     """
-    # Reuse your field collector; only SPFH is needed here
     plevels, q_by, _, _ = _collect_pl_fields(gf)
 
     # Filter to requested span
@@ -292,7 +288,6 @@ def compute_iwv(gf, pmin_mb=1000, pmax_mb=200, g=9.80665):
     Ps_mb = np.array([p for _, p in flist])                 # (L,)
     Qs    = np.array([q_by[lbl] for lbl, _ in flist])       # (L, ny, nx)  kg/kg
 
-    # *** key: ASCENDING pressure so dp > 0 ***
     order = np.argsort(Ps_mb)                               # low→high
     Ps_pa = Ps_mb[order].astype(float) * 100.0              # Pa
     Qs    = Qs[order]
@@ -320,7 +315,7 @@ def fetch_slp(gf):
     Prefers MSLET, falls back to PRMSL.  Raises RuntimeError if neither exist.
     """
 
-    # Try MSLET next
+    # Try MSLET first
     out = read_msgs_by_name_and_level(gf, "MSLET")
     if out:
         slp = list(out.values())[0]
@@ -331,7 +326,7 @@ def fetch_slp(gf):
             units = "Pa"
         return slp, units
 
-    # Try PRMSL first
+    # Try PRMSL next
     out = read_msgs_by_name_and_level(gf, "PRMSL")
     if out:
         slp = list(out.values())[0]
@@ -510,7 +505,6 @@ def add_quiver_key_box(ax, Q, ref=500, loc="upper right",
         labelsep=0.08,  # spacing between arrow and label
         color="k", zorder=1010
     )
-    # Make the reference arrow a touch thicker
     try:
         qk.set_zorder(1010)
         if hasattr(qk, "text"):
@@ -643,7 +637,7 @@ def draw_basemap(ax, datacrs=ccrs.PlateCarree(), extent=None, xticks=None,
         ax.set_global()
         extent = [-180., 180., -90., 90.]
     else:
-        ax.set_extent(extent, crs=datacrs)  # example for CONUS_West; we’ll parameterize later
+        ax.set_extent(extent, crs=datacrs)  # example for CONUS_West; parameterize later
         
     return ax
 
@@ -657,7 +651,7 @@ def default_barb_kwargs(model, scaling_factor=1.0):
     - length scales a bit with figure scaling.
     - increments are in *knots* (since we convert U/V to knots).
     """
-    # tweak length by model density if you like
+    # tweak length by model density if wanting
     base_len = 5.5
     if str(model).lower() == "arafs":
         base_len = 5.0  # a touch shorter for denser grid
@@ -773,7 +767,7 @@ def fetch_apcp_surface_point(gf, j, i):
     for key in ("surface", "0-0 m above ground"):
         if key in apcp:
             return float(apcp[key][j, i])
-    # fallback: if only one level exists, use it
+    # fallback: if only one level exists, use that
     if len(apcp) == 1:
         return float(next(iter(apcp.values()))[j, i])
     return np.nan
