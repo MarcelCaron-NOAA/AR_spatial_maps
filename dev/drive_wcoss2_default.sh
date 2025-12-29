@@ -11,7 +11,8 @@
 set -euxo pipefail
 
 # Go to your working directory
-cd /lfs/h2/emc/vpppg/noscrub/marcel.caron/AR_spatial_maps || exit 1
+export BASEDIR="${BASEDIR:-/lfs/h2/emc/vpppg/save/marcel.caron/AR_spatial_maps}"
+cd $BASEDIR || exit 1
 
 # Optional: print node info and environment
 echo "Running on host: $(hostname)"

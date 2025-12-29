@@ -19,7 +19,7 @@ POINT_LAT="47.6061"  # degrees; used for meteograms
 POINT_LON="122.3328" # degrees; used for meteograms
 
 # Paths
-HOME_DIR=/lfs/h2/emc/vpppg/noscrub/${USER}/AR_spatial_maps        # top of this repo
+HOME_DIR=${BASEDIR}       # top of this repo
 COMOUT=/lfs/h2/emc/stmp/${USER}/arafs_output/plots          # will be created
 TMP=/lfs/h2/emc/stmp/${USER}/tmp/${USER}/ivt_tmp              # scratch
 FIX=${HOME_DIR}/fix                   # logos, etc. (optional for now)
