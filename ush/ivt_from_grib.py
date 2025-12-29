@@ -7,6 +7,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from matplotlib.colors import ListedColormap
+from scipy.ndimage import gaussian_filter
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 from datetime import datetime
@@ -155,7 +156,8 @@ def main():
             slp_levels = np.arange(lo, hi+0.1, step)
         except Exception:
             slp_levels = np.arange(900, 1050, 4)
-        cs_slp = ax.contour(LON, LAT, SLP, levels=slp_levels,
+        SLP_smooth = gaussian_filter(SLP, signma=0.5)
+        cs_slp = ax.contour(LON, LAT, SLP_smooth, levels=slp_levels,
             colors="k", linewidths=0.6, transform=datacrs, zorder=101
         )
         for coll in cs_slp.collections:
