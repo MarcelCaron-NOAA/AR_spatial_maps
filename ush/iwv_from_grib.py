@@ -166,7 +166,11 @@ def main():
             slp_levels = np.arange(lo, hi+0.1, step)
         except Exception:
             slp_levels = np.arange(900, 1050, 4)
-        cs_slp = ax.contour(LON, LAT, SLP, levels=slp_levels,
+        if f"{args.model}" == "arafs":
+            SLP_smooth = gaussian_filter(SLP, sigma=5.)
+        else:
+            SLP_smooth = SLP
+        cs_slp = ax.contour(LON, LAT, SLP_smooth, levels=slp_levels,
             colors="k", linewidths=0.6, transform=datacrs, zorder=101
         )
         for coll in cs_slp.collections:
