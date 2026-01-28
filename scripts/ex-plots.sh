@@ -61,7 +61,7 @@ FHR3=$(printf "%03d" "${FHR}")
 
 VAR_LC=$(echo "${VAR}" | tr '[:upper:]' '[:lower:]')
 
-# --- Build FILE_TEMPLATE (meteograms need it; safe for all vars) ---
+# --- Build FILE_TEMPLATE (time-heights need it; safe for all vars) ---
 TEMPLATE_SFC_RAW=""
 case "${MODEL}" in
   gfsv16) TEMPLATE_RAW="${TEMPLATE_GFSV16}";;
@@ -88,7 +88,7 @@ case "${MODEL}" in
   *) echo "Unsupported MODEL=${MODEL}" >&2; exit 3 ;;
 esac
 
-if [[ "${VAR_LC}" != "meteogram" ]]; then
+if [[ "${VAR_LC}" != "timeheight" ]]; then
     FILE_PATH="${FILE_TEMPLATE//\{FHR3\}/$FHR3}"
     if [[ ! -s "${FILE_PATH}" ]]; then
         echo "GRIB2 file missing: ${FILE_PATH}" >&2; exit 4
@@ -99,7 +99,7 @@ if [[ "${MODEL}" == "aigfsv1" && -n "${TEMPLATE_SFC_RAW:-}" ]]; then
     SFC_FILE_TEMPLATE="${TEMPLATE_SFC_RAW//\{IDATE\}/$IDATE}"
     SFC_FILE_TEMPLATE="${SFC_FILE_TEMPLATE//\{IHOUR\}/$IHOUR}"
     SFC_FILE_TEMPLATE="${SFC_FILE_TEMPLATE//\{HEAD_AIGFSV1\}/$HEAD_AIGFSV1}"
-    if [[ "${VAR_LC}" != "meteogram" ]]; then
+    if [[ "${VAR_LC}" != "timeheight" ]]; then
         SFC_FILE_PATH="${SFC_FILE_TEMPLATE//\{FHR3\}/$FHR3}"
         if [[ ! -s "${SFC_FILE_PATH}" ]]; then
             echo "Surface GRIB2 file missing: ${SFC_FILE_PATH}" >&2; exit 4
@@ -140,7 +140,7 @@ if [[ -n "${SFC_FILE_PATH}" ]]; then
     EXTRA_SLP_ARGS+=( --sfc-file "${SFC_FILE_PATH}" )
 fi
 
-if [[ "${VAR_LC}" == "meteogram" ]]; then
+if [[ "${VAR_LC}" == "timeheight" ]]; then
    METE_MODELS="${MODELS:-${MODEL}}"
 
    METE_ARGS=()

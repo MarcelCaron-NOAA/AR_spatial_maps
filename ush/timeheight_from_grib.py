@@ -7,7 +7,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.gridspec import GridSpec
-from matplotlib.ticker import ScalarFormatter
+from matplotlib.ticker import ScalarFormatter, FixedLocator, FuncFormatter, NullLocator, NullFormatter
 from datetime import datetime, timedelta
 
 import plot_util as util
@@ -72,7 +72,7 @@ def main():
     if not models:
         raise ValueError("No models provided to --models")
     if len(models) > 3:
-        print("[meteogram] More than 3 models requested; plotting only first 3 RH panels.")
+        print("[crosssection] More than 3 models requested; plotting only first 3 RH panels.")
     models_rh = models[:3]   # RH panels max
 
     tmpl = {}
@@ -95,12 +95,6 @@ def main():
     if not outdir:
         ap.error("One of --out or --comout is required")
     os.makedirs(outdir, exist_ok=True)
-
-    fhrs = parse_fhrs(args.fhrs)
-
-    # Build time axis from INIT + fhr (use your passed INIT as truth)
-    init_dt = datetime.strptime(args.idate + args.ihour, "%Y%m%d%H")
-    valid_dts = [init_dt + timedelta(hours=int(f)) for f in fhrs]
 
     fhrs = parse_fhrs(args.fhrs)
     init_dt = datetime.strptime(args.idate + args.ihour, "%Y%m%d%H")
@@ -160,6 +154,9 @@ def main():
     for model in models:
         ivt = []; iwv = []; apcp = []
         rh_prof_list = []  # only if model in models_rh
+        u_prof_list = []
+        v_prof_list = []
+        tmp_prof_list = []
 
         # get (j,i) if we precomputed it; otherwise compute on first file
         ji = ij_by_model.get(model, None)
@@ -172,6 +169,18 @@ def main():
 
             gf = grib2io.open(fpath, mode="r")
 
+            """
+            # TEMP FOR DEBUGGING ONLY 
+            valid_expected = init_dt + timedelta(hours=int(f))
+            rh_msgs = util.read_msgs_by_name_and_level(gf, "RH", return_msgs=True)
+            any_msg = next(iter(rh_msgs.values()))
+            vt = getattr(any_msg, "validDate", None)
+            if vt is None:
+                vt = getattrs(any_msg, "valid_datetime", None)
+
+            print(f"[TIMECHK] fhr={f3}  expected={valid_expected}  grib_valid={vt}  file={os.path.basename(fpath)}")
+            """
+
             # compute ij once if needed
             if ji is None:
                 rh_msgs = util.read_msgs_by_name_and_level(gf, "RH", return_msgs=True)
@@ -182,6 +191,53 @@ def main():
                 ji = util.ij_from_latlon_regular_ll(ref_msg, args.lat, lon_samp)
             j, i = ji
 
+            if model in models_rh:
+                # --- RH ---
+                rh_by = util.read_msgs_by_name_and_level(gf, "RH")
+                rh_p = {}
+                for lbl, arr in rh_by.items():
+                    p = util._parse_mb(lbl)
+                    if p is not None:
+                        rh_p[p] = float(arr[j, i])
+                rh_prof = np.array([rh_p.get(p, np.nan) for p in p_levels_hpa], dtype=float)
+                rh_prof_list.append(rh_prof)
+
+                # --- Winds (UGRD/VGRD) on isobaric levels ---
+                u_by = util.read_msgs_by_name_and_level(gf, "UGRD")
+                v_by = util.read_msgs_by_name_and_level(gf, "VGRD")
+                u_p, v_p = {}, {}
+                for lbl, arr in u_by.items():
+                    p = util._parse_mb(lbl)
+                    if p is not None:
+                        u_p[p] = float(arr[j, i])
+                for lbl, arr in v_by.items():
+                    p = util._parse_mb(lbl)
+                    if p is not None:
+                        v_p[p] = float(arr[j, i])
+
+                u_prof = np.array([u_p.get(p, np.nan) for p in p_levels_hpa], dtype=float)
+                v_prof = np.array([v_p.get(p, np.nan) for p in p_levels_hpa], dtype=float)
+
+                # Convert m/s -> knots for barbs (optional but typical)
+                u_prof = util.wind_ms_to_knots(u_prof)
+                v_prof = util.wind_ms_to_knots(v_prof)
+
+                u_prof_list.append(u_prof)
+                v_prof_list.append(v_prof)
+
+                # --- Temperature (TMP) on isobaric levels for freezing line ---
+                tmp_by = util.read_msgs_by_name_and_level(gf, "TMP")  # usually Kelvin in GRIB
+                t_p = {}
+                for lbl, arr in tmp_by.items():
+                    p = util._parse_mb(lbl)
+                    if p is not None:
+                        t_p[p] = float(arr[j, i])
+
+                tmp_prof = np.array([t_p.get(p, np.nan) for p in p_levels_hpa], dtype=float)
+                tmp_prof_list.append(tmp_prof)
+
+
+            '''
             # RH time-height (only for models_rh)
             if model in models_rh:
                 rh_by = util.read_msgs_by_name_and_level(gf, "RH")  # "850 mb" -> 2D
@@ -195,6 +251,7 @@ def main():
                 # vector on common pressure grid (missing -> nan)
                 rh_prof = np.array([rh_p.get(p, np.nan) for p in p_levels_hpa], dtype=float)
                 rh_prof_list.append(rh_prof)
+            '''
 
             # IVT/IWV point values (from main file)
             ivt_val, iwv_val = util.compute_ivt_iwv_point(gf, j, i, pmin_mb=1000, pmax_mb=200)
@@ -219,6 +276,9 @@ def main():
         }
         if model in models_rh:
             series[model]["rh"] = np.vstack(rh_prof_list)  # (T,L)
+            series[model]["u"] = np.vstack(u_prof_list)  # (T,L) knots
+            series[model]["v"] = np.vstack(v_prof_list)  # (T,L) knots
+            series[model]["tmp"] = np.vstack(tmp_prof_list)  # (T,L) Kelvin
 
     # ===== Plot =====
     n_rh = len(models_rh)
@@ -237,6 +297,9 @@ def main():
     T = mdates.date2num(valid_dts)
     TT, PP = np.meshgrid(T, p_levels_hpa)
 
+    print("T min/max:", np.min(T), np.max(T), mdates.num2date(np.min(T)), mdates.num2date(np.max(T)))
+    print("TT min/max:", np.nanmin(TT), np.nanmax(TT), mdates.num2date(np.nanmin(TT)), mdates.num2date(np.nanmax(TT)))
+
     # RH colormap
     try:
         cmap, norm, bnds, ticks, lbl, _units = dicts.cmaps("rh")
@@ -245,7 +308,7 @@ def main():
         cmap = "YlGn"
         norm = None
         levels = np.arange(10, 101, 10)
-    cmap.set_under("white")
+    #cmap.set_under("white")
 
     rh_axes = []
     cf_last = None
@@ -258,29 +321,74 @@ def main():
         cf = ax.contourf(
             TT, PP, rh_timeheight.T,
             levels=levels, cmap=cmap, norm=norm,
-            extend="min"
+            extend="neither"
         )
         cf_last = cf
+        cs = ax.contour(
+            TT, PP, rh_timeheight.T,
+            levels=levels,              # same bin edges
+            colors="0.5",               # gray (0=black, 1=white)
+            linewidths=0.35,
+            alpha=0.8,
+        )
 
         ax.set_yscale("log")
         ax.invert_yaxis()
         ax.set_ylim(1000, 200)
-        ax.set_ylabel("Pressure (hPa)")
-        ax.set_title(f"RH Time–Height: {model.upper()}", loc="left")
+        ax.set_ylabel("Pressure (hPa)", fontweight="bold")
+        ax.set_title(f"{model.upper()}", loc="left", fontweight="bold")
 
-        # pressure ticks
-        stdp = np.array([1000, 925, 850, 700, 500, 300, 250, 200], dtype=float)
-        ax.set_yticks(stdp)
-        sf = ScalarFormatter()
-        sf.set_scientific(False)
-        sf.set_useOffset(False)
-        ax.yaxis.set_major_formatter(sf)
-        ax.get_yaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
-        ax.set_yticklabels([f"{int(p)}" for p in stdp])
+        stdp = np.array([1000, 925, 850, 700, 600, 500, 400, 300, 250, 200], dtype=float)
+        ax.set_yscale("log")
+        ax.invert_yaxis()
+        ax.set_ylim(1000, 200)
+        # Force tick locations
+        ax.yaxis.set_major_locator(FixedLocator(stdp))
+        # Force integer labels
+        ax.yaxis.set_major_formatter(FuncFormatter(lambda y, _: f"{int(y)}"))
+        # Prevent “bonus” ticks/labels from appearing
+        ax.yaxis.set_minor_locator(NullLocator())
+        ax.yaxis.set_minor_formatter(NullFormatter())
 
         #if k < n_rh - 1:
         #    plt.setp(ax.get_xticklabels(), visible=False)
         plt.setp(ax.get_xticklabels(), visible=False)
+
+        U = series[model]["u"].T
+        V = series[model]["v"].T
+        t_stride = max(1, int(len(valid_dts) / 18))
+        p_stride = 2
+
+        t_idx = np.arange(0, len(valid_dts), t_stride)
+        p_idx = np.arange(0, len(p_levels_hpa), p_stride)
+
+        TTb = TT[p_idx][:, t_idx]
+        PPb = PP[p_idx][:, t_idx]
+        Ub  = U[p_idx][:, t_idx]
+        Vb  = V[p_idx][:, t_idx]
+
+        Ub = np.ma.masked_invalid(Ub)
+        Vb = np.ma.masked_invalid(Vb)
+
+        barb_kw = util.default_barb_kwargs(model, scaling_factor=1.0)
+        # "Bold" the barbs by bumping linewidth a bit
+        barb_kw.update(dict(
+            barbcolor="k",
+            flagcolor="k",
+            linewidth=0.8,
+            zorder=50
+        ))
+
+        ax.barbs(TTb, PPb, Ub, Vb, **barb_kw)
+
+        Tprof = series[model]["tmp"]
+        p_freeze = util.freezing_pressure_hpa(p_levels_hpa, Tprof, t0_k=273.15)
+
+        ax.plot(valid_dts, p_freeze, color="blue", linewidth=2.2, zorder=60)
+
+    xmin = valid_dts[0]
+    xmax = valid_dts[-1]
+    rh_axes[0].set_xlim(xmin, xmax)
 
     # --- shared RH colorbar on RHS spanning ALL RH panels ---
     bbox_top = rh_axes[0].get_position()
@@ -294,7 +402,9 @@ def main():
         bbox_top.y1 - bbox_bot.y0
     ])
     cbar = fig.colorbar(cf_last, cax=cax, orientation="vertical", ticks=ticks)
-    cbar.set_label("RH (%)")
+    cbar.set_label("RH (%)", fontweight="bold")
+    for lbl in cbar.ax.get_yticklabels():
+        lbl.set_fontweight("bold")
     
     for ax in rh_axes:
         ax.tick_params(labelbottom=False)
@@ -302,14 +412,19 @@ def main():
     # ---- Panel: Precip (multi-model) ----
     axp = fig.add_subplot(gs[n_rh], sharex=rh_axes[0])
     axp.grid(True, alpha=0.25)
-    axp.set_ylabel("APCP (mm)")
+    axp.set_ylabel("Precip.\n(mm)", fontweight="bold")
 
     
     for model in models:
         col = dicts.model_colors(model)
+        if min(fhrs) == 0 and series[model]["apcp"][0] != 0:
+            print(f"Setting non-zero {model} F000 precipitation to zero")
+            series[model]["apcp"][0] = 0
         axp.plot(valid_dts, series[model]["apcp"], linewidth=1.4, label=model.upper(), color=col)
 
-    axp.legend(loc="upper left", ncol=min(3, len(models)), fontsize=9)
+    pleg = axp.legend(loc="upper left", ncol=min(3, len(models)), fontsize=9)
+    for txt in pleg.get_texts():
+        txt.set_fontweight("bold")
     plt.setp(axp.get_xticklabels(), visible=False)
     axp.tick_params(labelbottom=False)
 
@@ -317,35 +432,86 @@ def main():
     # ---- Panel: IVT + IWV (multi-model) ----
     ax3 = fig.add_subplot(gs[n_rh + 1], sharex=rh_axes[0])
     ax3.grid(True, alpha=0.25)
-    ax3.set_ylabel("IWV (mm)")
+    ax3.set_ylabel("IWV\n(mm; dashed)", fontweight="bold")
 
     ax3r = ax3.twinx()
-    ax3r.set_ylabel(r"IVT (kg m$^{-1}$ s$^{-1}$)")
-    ax3r.axhline(250, color="0.5", linestyle=":", linewidth=1.0, zorder=0)
+    ax3r.set_ylabel("IVT\n" + r"(kg m$^{-1}$ s$^{-1}$; solid)", fontweight="bold")
+    #ax3r.axhline(250, color="0.5", linestyle=":", linewidth=1.0, zorder=0) # removed because it doesn't deal with the date axes well
+    ax3r.plot([valid_dts[0], valid_dts[-1]], [250, 250], color="0.5", linestyle="-", linewidth=1.0, zorder=0)
+    ax3.plot([valid_dts[0], valid_dts[-1]], [20, 20], color="0.5", linestyle=":", linewidth=1.0, zorder=0)
+    ax3r.plot(valid_dts[-1], 250, marker="o", markersize=4, color="0.5", zorder=0, clip_on=False)
+    ax3.plot(valid_dts[0], 20, marker="o", markersize=4, color="0.5", zorder=0, clip_on=False)
+
+    edges = util._time_edges(valid_dts)
 
     for model in models:
         col = dicts.model_colors(model)
+        
+        # Shade AR events
+        ar_mask = (np.asarray(series[model]['ivt']) >= 250.0) & (np.asarray(series[model]['iwv']) >= 20.0)
+        ar_mask &= np.isfinite(series[model]['ivt']) & np.isfinite(series[model]['iwv'])
+
+        for s, e in util._contiguous_true_runs(ar_mask):
+            left = edges[s]
+            right = edges[e + 1]
+            ax3.axvspan(
+                left, right, facecolor=col, alpha=0.12, linewidth=0.0, zorder=0
+            )
+
+        # Plot IWV (left) and IVT (right)
         ax3.plot(valid_dts, series[model]["iwv"], linewidth=1.4, linestyle="--", color=col)
         ax3r.plot(valid_dts, series[model]["ivt"], linewidth=1.4, linestyle="-",  color=col)
 
-    ax3.set_title("IVT (solid) and IWV (dashed) by model", loc="left")
+    #ax3.set_title("IVT (solid) and IWV (dashed) by model", loc="left")
 
 
     # ---- Time axis formatting ----
+    tick_dts = valid_dts
+    tick_locs = mdates.date2num(tick_dts)
+
+    ax3.xaxis.set_major_locator(FixedLocator(tick_locs))
     ax3.xaxis.set_major_formatter(mdates.DateFormatter("%b %d\n%HZ"))
-    ax3.xaxis.set_major_locator(mdates.HourLocator(interval=max(6, int((len(valid_dts) / 10) * 6))))
+
+    max_labels = 13
+    force_even = True
+    n = len(tick_locs)
+    step = int(np.ceil(n / max_labels))
+    if force_even and step > 1:
+        step = 2 if step <= 2 else step
+
+    labels = [
+        dt.strftime("%b %d\n%HZ") if (i % step == 0) else ""
+        for i, dt in enumerate(tick_dts)
+    ]
+    ax3.set_xticks(tick_dts)
+    ax3.set_xticklabels(labels)
     ax3.tick_params(labelbottom=True)
 
+    for ax in [*rh_axes, axp, ax3, ax3r]:
+        ax.xaxis.label.set_fontweight("bold")
+        ax.yaxis.label.set_fontweight("bold")
+        for lbl in ax.get_xticklabels() + ax.get_yticklabels():
+            lbl.set_fontweight("bold")
+
     lat = args.lat
-    lon = util.normalize_lon_180(args.lon)
-    title = args.title.strip() if args.title.strip() else f"Meteogram | {lat:.2f}N {abs(lon):.2f}{'W' if lon<0 else 'E'}"
-    fig.suptitle(title + "\n" + f"Initialized: {args.ihour}Z {args.idate}", y=0.995)
+    lon = util.normalize_lon_180(args.lon)    
+    deg = "\N{DEGREE SIGN}"
+    title = (
+        args.title.strip() 
+        if args.title.strip() 
+        else f"Time-Height Meteogram | "
+            f"{abs(lat):.2f}{deg}{'N' if lat >= 0 else 'S'} " 
+            f"{abs(lon):.2f}{deg}{'W' if lon < 0 else 'E'}"
+    )
+    init_dt = datetime.strptime(args.idate + args.ihour, "%Y%m%d%H")
+    init_str = init_dt.strftime("Init %HZ %d %b %Y")
+    fig.suptitle(title + "\n" + init_str, y=0.93, fontweight="bold")
 
 
     # Output
     datedir = os.path.join(outdir, args.idate)
     os.makedirs(datedir, exist_ok=True)
-    ofn = os.path.join(datedir, f"meteogram.{args.idate}{args.ihour}.{lat:.2f}_{lon:.2f}.png")
+    ofn = os.path.join(datedir, f"th_meteo.{args.idate}{args.ihour}.{lat:.2f}_{lon:.2f}.png")
     # TEMP
     print("\n=== DEBUG: shared-x + xlim + units ===")
     for k, ax in enumerate(fig.axes):
@@ -395,6 +561,16 @@ def main():
     print("len(valid_dts)=", len(valid_dts))
     print("valid_dts[0],[-1]=", valid_dts[0], valid_dts[-1], "types:", type(valid_dts[0]), type(valid_dts[-1]))
     print("mdates.date2num(valid_dts)[0],[-1]=", mdates.date2num(valid_dts[0]), mdates.date2num(valid_dts[-1]))
+    for k, ax in enumerate([*rh_axes, axp, ax3, ax3r]):
+        for li, line in enumerate(ax.get_lines()):
+            xd = line.get_xdata()
+            if len(xd):
+                try:
+                    xdn = mdates.date2num(xd) # will work if datetime-like
+                    print(f"AX{k} line{li} date2num min/max:", np.min(xdn), np.max(xdn))
+                except Exception:
+                    xdn = np.asarray(xd, dtype=float)
+                    print(f"AX{k} line{li} numeric min/max:", np.min(xdn), np.max(xdn))
     # TEMP
     fig.savefig(ofn, bbox_inches="tight")
     plt.close(fig)

@@ -16,8 +16,8 @@ done
 
 # Call python (respect machine like you already do)
 if [[ "${machine}" == "gaeac6" ]]; then
-  "${CONDA_PREFIX}/bin/python" "$(dirname "$0")/meteogram_from_grib.py" "${ARGS[@]}"
+  "${CONDA_PREFIX}/bin/python" "$(dirname "$0")/timeheight_from_grib.py" "${ARGS[@]}"
 else
-  python3 "$(dirname "$0")/meteogram_from_grib.py" "${ARGS[@]}"
+  python3 "$(dirname "$0")/timeheight_from_grib.py" "${ARGS[@]}"
 fi
 
