@@ -715,46 +715,73 @@ def ij_from_latlon_regular_ll(msg, lat, lon):
     j = max(0, min(ny - 1, j))
     return j, i
 
+def fetch_psfc_mb_point(gf, j, i):
+    """
+    Best-effort surface pressure at point in mb.
+    Tries common shortNames: PRES, PSFC. Returns np.nan if not found.
+    """
+    for name in ("PRES", "PSFC"):
+        d = read_msgs_by_name_and_level(gf, name)
+        if not d:
+            continue
+
+        # Prefer an explicit surface key if present
+        for key in ("surface", "0-0 m above ground"):
+            if key in d:
+                val = float(d[key][j, i])
+                return val / 100.0 if val > 2000 else val  # Pa -> mb if needed
+
+        # Fallback: if only one level exists, take it
+        if len(d) == 1:
+            arr = next(iter(d.values()))
+            val = float(arr[j, i])
+            return val / 100.0 if val > 2000 else val
+
+    return np.nan
+
 def compute_ivt_iwv_point(gf, j, i, pmin_mb=1000, pmax_mb=200, g=9.80665):
-    """
-    Point IVT magnitude and IWV using SPFH, UGRD, VGRD on isobaric levels.
-    IVT = (1/g) ∫ q * |V| dp   (we do vector then magnitude)
-    IWV = (1/g) ∫ q dp  -> kg/m^2 -> mm (1 mm = 1 kg/m^2)
-    Integrate with ascending pressure so dp>0.
-    """
     q_by = read_msgs_by_name_and_level(gf, "SPFH")
     u_by = read_msgs_by_name_and_level(gf, "UGRD")
     v_by = read_msgs_by_name_and_level(gf, "VGRD")
+
+    # surface-pressure-aware bottom bound
+    psfc_mb = fetch_psfc_mb_point(gf, j, i)
+    if np.isfinite(psfc_mb):
+        pmin_eff = min(float(pmin_mb), float(psfc_mb))
+    else:
+        pmin_eff = float(pmin_mb)
 
     levels = set(q_by.keys()) & set(u_by.keys()) & set(v_by.keys())
     levs = []
     for lbl in levels:
         p = _parse_mb(lbl)
-        if p is not None and (pmax_mb <= p <= pmin_mb):
+        if p is None:
+            continue
+        # use pmin_eff instead of pmin_mb
+        if pmax_mb <= p <= pmin_eff:
             levs.append((lbl, p))
+
     if len(levs) < 2:
         raise RuntimeError("Not enough SPFH/UGRD/VGRD levels for IVT/IWV point calc.")
 
     Ps_mb = np.array([p for _, p in levs], dtype=float)
-    # sort ascending pressure so dp>0
-    order = np.argsort(Ps_mb)
+    order = np.argsort(Ps_mb)        # ascending so dp>0
     Ps_pa = Ps_mb[order] * 100.0
 
-    # 1D profiles at point
     q = np.array([q_by[levs[k][0]][j, i] for k in order], dtype=float)
     u = np.array([u_by[levs[k][0]][j, i] for k in order], dtype=float)
     v = np.array([v_by[levs[k][0]][j, i] for k in order], dtype=float)
 
-    dp = np.diff(Ps_pa)                      # >0
+    dp   = np.diff(Ps_pa)
     qbar = 0.5 * (q[:-1] + q[1:])
     ubar = 0.5 * (u[:-1] + u[1:])
     vbar = 0.5 * (v[:-1] + v[1:])
 
     ivtu = np.nansum(qbar * ubar * dp) / g
     ivtv = np.nansum(qbar * vbar * dp) / g
-    ivt = float(np.hypot(ivtu, ivtv))
+    ivt  = float(np.hypot(ivtu, ivtv))
 
-    iwv = float(np.nansum(qbar * dp) / g)    # kg/m^2 == mm
+    iwv  = float(np.nansum(qbar * dp) / g)
     return ivt, iwv
 
 def fetch_apcp_surface_point(gf, j, i):
@@ -771,4 +798,100 @@ def fetch_apcp_surface_point(gf, j, i):
     if len(apcp) == 1:
         return float(next(iter(apcp.values()))[j, i])
     return np.nan
+
+def freezing_pressure_hpa(p_levels_hpa, tmp_TL, t0_k=273.15):
+    """
+    Compute freezing-level pressure (hPa) vs time from temperature on isobaric levels.
+
+    Parameters
+    ----------
+    p_levels_hpa : 1D array (L,) descending, e.g. [1000, 925, ..., 200]
+    tmp_TL : 2D array (T,L) temperature in Kelvin (NaN allowed)
+    t0_k : float, freezing threshold (default 273.15 K)
+
+    Returns
+    -------
+    p_freeze : 1D array (T,) pressure (hPa) where temp crosses t0_k.
+               If near-sfc is <= freezing OR no crossing exists, returns NaN for that time.
+    """
+    p = np.asarray(p_levels_hpa, dtype=float)
+    T = np.asarray(tmp_TL, dtype=float)
+
+    if T.ndim != 2 or T.shape[1] != p.shape[0]:
+        raise ValueError("tmp_TL must be (T,L) matching p_levels_hpa length")
+
+    out = np.full((T.shape[0],), np.nan, dtype=float)
+
+    for ti in range(T.shape[0]):
+        prof = T[ti, :]
+
+        # Require at least some valid values
+        if not np.isfinite(prof).any():
+            continue
+
+        # "Near-surface": highest pressure level in your list (first element, since descending)
+        T_sfc = prof[0]
+        if np.isfinite(T_sfc) and T_sfc <= t0_k:
+            # As requested: if surface is freezing, don't draw a line (comes out of ground later)
+            continue
+
+        # Find crossing between adjacent levels (descending p: index 0 is near surface)
+        # We want a sign change in (T - t0)
+        d = prof - t0_k
+
+        # Must have two finite points for interpolation
+        for k in range(len(p) - 1):
+            if not (np.isfinite(d[k]) and np.isfinite(d[k+1])):
+                continue
+
+            # crossing if sign change or one exactly zero
+            if d[k] == 0:
+                out[ti] = p[k]
+                break
+            if d[k] * d[k+1] < 0:
+                # linear interpolation in temperature between levels k and k+1
+                # p_cross = p_k + frac*(p_{k+1}-p_k)
+                frac = (t0_k - prof[k]) / (prof[k+1] - prof[k])
+                out[ti] = p[k] + frac * (p[k+1] - p[k])
+                break
+
+        # If no crossing found: stays NaN (either all above or all below or missing)
+    return out
+
+def _time_edges(dts):
+    """
+    Given center times dts (len T), return bin edges (len T+1) where each bin spans
+    halfway to neighbors. Works for irregular spacing too.
+    """
+    if len(dts) == 1:
+        # arbitrary +/- 30 min if only one time
+        from datetime import timedelta
+        return [dts[0] - timedelta(minutes=30), dts[0] + timedelta(minutes=30)]
+
+    edges = []
+    # left edge
+    edges.append(dts[0] - (dts[1] - dts[0]) / 2)
+    # interior midpoints
+    for k in range(len(dts) - 1):
+        edges.append(dts[k] + (dts[k+1] - dts[k]) / 2)
+    # right edge
+    edges.append(dts[-1] + (dts[-1] - dts[-2]) / 2)
+    return edges
+
+
+def _contiguous_true_runs(mask):
+    """
+    Given boolean mask (len T), return list of (start_idx, end_idx) inclusive for True runs.
+    """
+    mask = np.asarray(mask, dtype=bool)
+    if mask.size == 0:
+        return []
+    idx = np.where(mask)[0]
+    if idx.size == 0:
+        return []
+    # split where gaps > 1
+    breaks = np.where(np.diff(idx) > 1)[0]
+    starts = np.r_[idx[0], idx[breaks + 1]]
+    ends   = np.r_[idx[breaks], idx[-1]]
+    return list(zip(starts, ends))
 
