@@ -27,7 +27,7 @@ TMP=/lfs/h2/emc/stmp/${USER}/tmp/${USER}/ivt_tmp              # scratch
 FIX=${HOME_DIR}/fix                   # logos, etc. (optional for now)
 
 # Model head directories (everything before date subpaths)
-HEAD_GFSV16=/lfs/h1/ops/prod/com/gfs/v16.3
+HEAD_GFSV16=/lfs/h2/emc/ptmp/marcel.caron/data/
 HEAD_GDAS=/lfs/h1/ops/prod/com/gfs/v16.3
 HEAD_GFSV17=/lfs/h2/emc/gfstemp/emc.global/comroot/rt17_upd03_realtime   # adjust if/when used
 HEAD_AIGFSV1=/lfs/h1/ops/prod/com/aigfs/v1.0
