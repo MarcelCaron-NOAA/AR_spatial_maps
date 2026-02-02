@@ -83,7 +83,7 @@ def main():
     # Shaded field
     cf = ax.contourf(
         LON, LAT, T2m, cmap=cmap, norm=norm, levels=bnds, 
-        alpha=0.9, extend="both", transform=datacrs, zorder=10
+        alpha=0.8, extend="both", transform=datacrs, zorder=10
     )
     cs_t2m = ax.contour(
         LON, LAT, T2m, transform=datacrs, levels=bnds,

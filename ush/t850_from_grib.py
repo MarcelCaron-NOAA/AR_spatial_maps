@@ -131,7 +131,7 @@ def main():
     cf = ax.contourf(
         LON, LAT, Tplot,
         cmap=cmap, norm=norm, levels=bnds,
-        alpha=0.9, extend="both",
+        alpha=0.8, extend="both",
         transform=datacrs, zorder=10
     )
 
