@@ -1,0 +1,34 @@
+########################################
+# User configuration for 2-m temperature plotting
+########################################
+# Time selectors
+DATE_TYPE=INIT           # INIT | VALID
+DATE=${YEAR}${MONTH}${DAY}            # YYYYMMDD
+HOUR=${HOUR}                  # HH (00-23)
+FHR=${FHOUR}                   # integer hours
+
+# What to plot
+MODEL=${MOD}             # gfsv16 | gfsv17 | arafs
+VAR=${VARIABLE}                  # IVT/IWV/TIMEHEIGHT/T2M
+DOMAIN=nepac        # see domain map in ush/dicts.py
+
+# Paths
+HOME_DIR=/lfs/h2/emc/vpppg/noscrub/${USER}/AR_spatial_maps
+COMOUT=/lfs/h2/emc/stmp/${USER}/arafs_output/plots
+TMP=/lfs/h2/emc/stmp/${USER}/tmp/${USER}/t2m_tmp
+FIX=${HOME_DIR}/fix
+
+# Model head directories
+HEAD_GFSV16=/lfs/h1/ops/prod/com/gfs/v16.3
+HEAD_GFSV17=/lfs/h1/ops/prod/com/gfs/v17.0
+HEAD_GDAS=/lfs/h1/ops/prod/com/gdas/v16.3
+HEAD_ARAFS=/lfs/h2/emc/ptmp/xingren.wu/ARAFS_NRT_2025
+
+# Filename templates
+TEMPLATE_GFSV16='{HEAD_GFSV16}/gfs.{IDATE}/{IHOUR}/atmos/gfs.t{IHOUR}z.pgrb2.0p25.f{FHR3}'
+TEMPLATE_GDAS='{HEAD_GDAS}/gdas.{IDATE}/{IHOUR}/atmos/gdas.t{IHOUR}z.pgrb2.0p25.f{FHR3}'
+TEMPLATE_ARAFS='{HEAD_ARAFS}/{IDATE}{IHOUR}/00E/{IDATE}{IHOUR}.arafs.parent.atm.f{FHR3}.grb2'
+
+# Options (passed through to python)
+# UNITS can be C, F, or K (default C in python)
+UNITS=C

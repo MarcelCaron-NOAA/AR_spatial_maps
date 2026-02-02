@@ -1,10 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-# Minimal generic wrapper: calls a matching python core if it exists,
-# otherwise errors with guidance.
+ORIG_ARGS=("$@")   # <-- ADD THIS LINE (save all args)
 
-# Forward all args to python if a core exists at ush/<var>_from_grib.py
+# Minimal generic wrapper...
 VAR=""; COMOUT=""; FHR=""; VDATE=""; VHH=""
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -22,12 +21,8 @@ CORE="$(dirname "$0")/${VAR_LC}_from_grib.py"
 
 if [[ -f "${CORE}" ]]; then
   OUTPNG="${COMOUT}/${VAR_LC}.f$(printf "%03d" ${FHR}).${VDATE}${VHH}.png"
-  python3 "${CORE}" "$@" --out "${OUTPNG}"
+  python3 "${CORE}" "${ORIG_ARGS[@]}" --out "${OUTPNG}"   # <-- CHANGE "$@" to ORIG_ARGS
   echo "Wrote ${OUTPNG}"
   exit 0
 fi
-
-echo "No python core found for VAR=${VAR} (expected $(basename "${CORE}"))." >&2
-echo "Create ${CORE} (or a dedicated plot_${VAR_LC}.sh) to implement plotting." >&2
-exit 6
 

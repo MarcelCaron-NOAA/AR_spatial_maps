@@ -11,24 +11,28 @@ FHRS=${FHRS:-"0-120/6"}
 # What to plot
 MODEL=${MOD}             # gfsv16 | gfsv17 | arafs
 VAR=${VARIABLE}                  # currently only IVT supported
-DOMAIN=nepac        # see domain map in ivt_from_grib.py
+DOMAIN=conuse        # see domain map in ivt_from_grib.py
 
 # time-heights
-MODELS=${MODELS}
+MODELS=${MODELS:-"gfsv16,arafs"}
 #POINT_LAT="47.6061"  # degrees; used for meteograms
 #POINT_LON="-122.3328" # degrees; used for meteograms
-POINT_LAT=${POINT_LAT}  # degrees; used for meteograms#
-POINT_LON=${POINT_LON} # degrees; used for meteograms
+POINT_LAT=${POINT_LAT:-"47.6061"}  # degrees; used for meteograms#
+POINT_LON=${POINT_LON:-"-122.3328"} # degrees; used for meteograms
 
 # Paths
-HOME_DIR=${BASEDIR}       # top of this repo
+HOME_DIR=${BASEDIR:-"/lfs/h2/emc/vpppg/save/marcel.caron/AR_spatial_maps"}       # top of this repo
 COMOUT=/lfs/h2/emc/stmp/${USER}/arafs_output/plots          # will be created
 TMP=/lfs/h2/emc/stmp/${USER}/tmp/${USER}/ivt_tmp              # scratch
 FIX=${HOME_DIR}/fix                   # logos, etc. (optional for now)
 
 # Model head directories (everything before date subpaths)
 HEAD_GFSV16=/lfs/h2/emc/ptmp/marcel.caron/data/
+HEAD_GFSCTL=/lfs/h2/emc/ptmp/xingren.wu/EVS/GFSopr/PGBF
+HEAD_GFSDENY=/lfs/h2/emc/ptmp/xingren.wu/EVS/GFSdeny/PGBF
 HEAD_GDAS=/lfs/h1/ops/prod/com/gfs/v16.3
+HEAD_URMA=/lfs/h1/ops/prod/com/urma/v2.10
+HEAD_RAP=/lfs/h1/ops/prod/com/rap/v5.1
 HEAD_GFSV17=/lfs/h2/emc/gfstemp/emc.global/comroot/rt17_upd03_realtime   # adjust if/when used
 HEAD_AIGFSV1=/lfs/h1/ops/prod/com/aigfs/v1.0
 #HEAD_ARAFS=/lfs/h2/emc/ptmp/xingren.wu/ARAFS_NRT_2025
@@ -36,8 +40,16 @@ HEAD_ARAFS=/lfs/h2/emc/ptmp/marcel.caron/data
 # Filename templates (bash will expand these; {FHR3} -> zero-padded)
 # GFSv16:
 TEMPLATE_GFSV16='{HEAD_GFSV16}/gfs.{IDATE}/{IHOUR}/atmos/gfs.t{IHOUR}z.pgrb2.0p25.f{FHR3}'
+# GFSCTL:
+TEMPLATE_GFSCTL='{HEAD_GFSCTL}/pgbf{FHR3}.{IDATE}{IHOUR}'
+# GFSDENY:
+TEMPLATE_GFSDENY='{HEAD_GFSDENY}/pgbf{FHR3}.{IDATE}{IHOUR}'
 # GDAS
 TEMPLATE_GDAS='{HEAD_GDAS}/gdas.{IDATE}/{IHOUR}/atmos/gdas.t{IHOUR}z.pgrb2.0p25.anl'
+# URMA
+TEMPLATE_URMA='{HEAD_URMA}/urma2p5.{IDATE}/urma2p5.t{IHOUR}z.2dvaranl_ndfd.grb2'
+# RAP
+TEMPLATE_RAP='{HEAD_RAP}/rap.{IDATE}/rap.t{IHOUR}z.awip32f{FHR}.grib2'
 # GFSv17:
 TEMPLATE_GFSV17='{HEAD_GFSV17}/gfs.{IDATE}/{IHOUR}/products/atmos/grib2/0p25/gfs.t{IHOUR}z.pgrb2.0p25.f{FHR3}'
 # AIGFS:
@@ -47,6 +59,8 @@ TEMPLATE_AIGFSV1_SFC='{HEAD_AIGFSV1}/aigfs.{IDATE}/{IHOUR}/model/atmos/grib2/aig
 TEMPLATE_ARAFS='{HEAD_ARAFS}/arafs.{IDATE}/{IHOUR}/arafs.{IDATE}{IHOUR}.f{FHR3}.grb2'
 
 # Plot style / options
-QUIVER_STRIDE=${QUIVER_STRIDE}          # thin wind vectors (grid stride)
-SLP_CONTOURS="980 996 1004 1012 1020 1028 1036"  # hPa labels (optional)
-BOOL_ANALYSIS=${BOOL_ANL}
+QUIVER_STRIDE=${QUIVER_STRIDE:-"10"}          # thin wind vectors (grid stride)
+BARBS=${BARBS:-"TRUE"}
+SLP_CONTOURS="980 988 996 1004 1012 1020 1028 1036"  # hPa labels (optional)
+BOOL_ANALYSIS=${BOOL_ANL:-"FALSE"}
+UNITS=C

@@ -120,20 +120,108 @@ def _collect_pl_fields(gf):
     return plevels, q_by, u_by, v_by
 
 def _latlon_from_msg(msg):
-    """Build lon/lat 2D arrays from a representative message’s grid metadata."""
-    nx = getattr(msg, "nx", None); ny = getattr(msg, "ny", None)
+    """
+    Build lon/lat 2D arrays from a representative message’s grid metadata.
+
+    Priority:
+      1) Use message-provided lat/lon arrays if available (best for projected grids like URMA).
+      2) Fallback to first/last gridpoint + linspace (works for regular lat/lon grids).
+    """
+    # ---- 1) Direct lat/lon arrays (preferred; handles URMA/projections) ----
+    for attr in ("latlons", "latlons()", "get_latlons", "grid_latlons"):
+        try:
+            if attr.endswith("()"):
+                fn = getattr(msg, attr[:-2], None)
+                if callable(fn):
+                    LAT, LON = fn()  # many libs return (lat, lon)
+                else:
+                    continue
+            else:
+                obj = getattr(msg, attr, None)
+                if callable(obj):
+                    LAT, LON = obj()
+                else:
+                    # sometimes stored as tuple already
+                    if isinstance(obj, (tuple, list)) and len(obj) == 2:
+                        LAT, LON = obj
+                    else:
+                        continue
+
+            if LAT is not None and LON is not None:
+                LAT = np.asarray(LAT)
+                LON = np.asarray(LON)
+                if LAT.size > 0 and LON.size > 0 and LAT.shape == LON.shape:
+                    return LON, LAT
+        except Exception:
+            pass
+
+    # ---- 2) Fallback: regular lat/lon grid endpoints ----
+    nx = getattr(msg, "nx", None) or getattr(msg, "Ni", None)
+    ny = getattr(msg, "ny", None) or getattr(msg, "Nj", None)
+
     lon0 = getattr(msg, "longitudeFirstGridpoint", None)
     lon1 = getattr(msg, "longitudeLastGridpoint", None)
     lat0 = getattr(msg, "latitudeFirstGridpoint", None)
     lat1 = getattr(msg, "latitudeLastGridpoint", None)
+
     if None in (nx, ny, lon0, lon1, lat0, lat1):
         return None, None
-    # Handle wrap (e.g., 0..359.75)
-    lons = np.linspace(lon0, lon1, int(nx), endpoint=True)
-    lats = np.linspace(lat0, lat1, int(ny), endpoint=True)
+
+    nx = int(nx); ny = int(ny)
+
+    lons = np.linspace(float(lon0), float(lon1), nx, endpoint=True)
+    lats = np.linspace(float(lat0), float(lat1), ny, endpoint=True)
     LON, LAT = np.meshgrid(lons, lats)
     return LON, LAT
 
+def _latlon_from_msg_safe(msg):
+    """
+    Robust lon/lat getter.
+    - For projected/curvilinear grids (e.g., RAP awip32 Lambert), try message-provided
+      lat/lon first (grid/latlons/latitude/longitude arrays).
+    - Fall back to the simple linear meshgrid method (_latlon_from_msg) for regular lat/lon grids.
+    """
+    import numpy as np
+
+    # 1) Try "grid" or "latlons" style APIs (callable or attribute)
+    for attr in ("latlons", "grid"):
+        if hasattr(msg, attr):
+            obj = getattr(msg, attr)
+            try:
+                out = obj() if callable(obj) else obj
+                if isinstance(out, tuple) and len(out) == 2:
+                    a, b = out
+                    a = np.asarray(a); b = np.asarray(b)
+
+                    # Heuristic to decide which is lat vs lon
+                    # lat should be within [-90, 90] almost always
+                    if np.nanmin(a) >= -90 and np.nanmax(a) <= 90:
+                        LAT, LON = a, b
+                    elif np.nanmin(b) >= -90 and np.nanmax(b) <= 90:
+                        LON, LAT = a, b
+                    else:
+                        # ambiguous; assume (lon,lat)
+                        LON, LAT = a, b
+
+                    if LON.size and LAT.size:
+                        return LON, LAT
+            except Exception:
+                pass
+
+    # 2) Try direct arrays on the message
+    for lon_name, lat_name in (
+        ("longitude", "latitude"),
+        ("longitudes", "latitudes"),
+        ("lon", "lat"),
+    ):
+        if hasattr(msg, lon_name) and hasattr(msg, lat_name):
+            LON = np.asarray(getattr(msg, lon_name))
+            LAT = np.asarray(getattr(msg, lat_name))
+            if LON.size and LAT.size:
+                return LON, LAT
+
+    # 3) Last resort: your old regular-grid approximation
+    return _latlon_from_msg(msg)
 
 def read_msgs_by_name_and_level(gf, var_name, want_levels=None, casefold=True, return_msgs=False):
     """
@@ -355,6 +443,109 @@ def fetch_uv_at_level(gf, level_mb=850):
     LON, LAT = _latlon_from_msg(ref_msg)
     return u_by[target_lbl], v_by[target_lbl], (LON, LAT)
 
+def fetch_tmp_2m(gf, units="C"):
+    """
+    Fetch 2-m temperature (TMP at 2 m above ground).
+    Returns: (T2m, (LON, LAT), units_out)
+    """
+    target_lbl = "2 m above ground"
+
+    # Pull values dict keyed by level label
+    t_by = read_msgs_by_name_and_level(gf, "TMP", return_msgs=False)
+    if target_lbl not in t_by:
+        # be a little flexible across products
+        alt_keys = [k for k in t_by.keys() if "2 m" in k and "ground" in k]
+        if alt_keys:
+            target_lbl = alt_keys[0]
+        else:
+            raise RuntimeError("TMP not found at 2 m above ground")
+
+    # Get the reference message at that level for lon/lat
+    t_msgs = read_msgs_by_name_and_level(gf, "TMP", return_msgs=True)
+    if target_lbl not in t_msgs:
+        # same fallback logic as above, in case keys differ slightly
+        alt_keys = [k for k in t_msgs.keys() if "2 m" in k and "ground" in k]
+        if alt_keys:
+            target_lbl = alt_keys[0]
+        else:
+            raise RuntimeError("TMP message not found at 2 m above ground")
+
+    ref_msg = t_msgs[target_lbl]
+    LON, LAT = _latlon_from_msg(ref_msg)
+
+    T = t_by[target_lbl]
+
+    # --- Unit conversion ---
+    u = (units or "C").upper()
+
+    # Heuristic: most GRIB TMP is in Kelvin
+    # If it's already in C/F, it won't exceed ~100 typically.
+    if np.nanmean(T) > 150.0:
+        Tc = T - 273.15
+    else:
+        Tc = T
+
+    if u == "K":
+        Tout = Tc + 273.15
+        units_out = "K"
+    elif u == "F":
+        Tout = Tc * 9.0 / 5.0 + 32.0
+        units_out = "F"
+    else:
+        Tout = Tc
+        units_out = "C"
+
+    return Tout, (LON, LAT), units_out
+
+'''
+def fetch_tmp_2m(gf, units="C"):
+    """
+    Fetch 2-m temperature TMP at 2 m above ground.
+    Returns: (data2d, (lon2d, lat2d), units_out)
+    """
+    # --- your existing attempts first ---
+    # e.g. try read_msgs_by_name_and_level(gf, "TMP", 2, "heightAboveGround") ...
+    # if found -> return
+
+    # --- fallback: scan all TMP messages and match the level string like wgrib2 shows ---
+    tmp_candidates = []
+    n = len(gf) if hasattr(gf, "__len__") else getattr(gf, "messages", 0)
+    for i in range(int(n)):
+        m = gf[i]
+        name = getattr(m, "shortName", None) or getattr(m, "name", None) or getattr(m, "parameterName", None)
+        if name != "TMP":
+            continue
+
+        lvl_txt = (
+            getattr(m, "level", None)
+            or getattr(m, "levelStr", None)
+            or getattr(m, "level_string", None)
+        )
+        if lvl_txt and "2 m above ground" in str(lvl_txt):
+            tmp_candidates.append(m)
+
+    if tmp_candidates:
+        m = tmp_candidates[0]
+        var = m.data if not callable(getattr(m, "data", None)) else m.data()
+        lons = np.linspace(
+        LON, LAT = m.grid()
+        # Units conversion (most likely Kelvin)
+        units_out = units.upper()
+        if units_out in ("C", "F"):
+            # assume Kelvin if values look like Kelvin
+            if float(var.mean()) > 150:
+                var_c = var - 273.15
+            else:
+                var_c = var
+            if units_out == "C":
+                return var_c, (LON, LAT), "C"
+            else:
+                return (var_c * 9.0/5.0 + 32.0), (LON, LAT), "F"
+        return var, (LON, LAT), "K"
+
+    raise RuntimeError("2-m temperature (TMP at 2 m above ground) not found in GRIB2.")
+'''
+
 def extent_from_domain(domain):
     domains = {
         "CONUS_West": (-150.0, -115.0, 18.0, 60.0),
@@ -406,9 +597,13 @@ def choose_quiver_stride(model: str, user_qs: int = None, nx: int = None, ny: in
     # These are overridden by strides passed in config
     defaults = {
         "gfsv16": 5,       # 0.25° grid -> denser, so smaller stride
+        "gfsctl": 5,       # 0.25° grid -> denser, so smaller stride
+        "gfsdeny": 5,       # 0.25° grid -> denser, so smaller stride
         "gfsv17": 5,    
         "aigfsv1": 5,    
         "gdas": 5,    
+        "urma": 83,    
+        "rap": 40,    
         "arafs": 83,       # finer grid -> larger stride (thin more)
     }
     key = (model or "").lower()
@@ -586,6 +781,15 @@ def draw_basemap(ax, datacrs=ccrs.PlateCarree(), extent=None, xticks=None,
 
     mapcrs = ax.projection
 
+    if isinstance(datacrs, str):
+        s = datacrs.strip().lower()
+        if s in ("platecarree", "platedcarree", "pc", "latlon", "lonlat", "geodetic", "epsg:4326"):
+            datacrs = ccrs.PlateCarree()
+        else:
+            raise TypeError(f"draw_basemap: datacrs must be a cartopy CRS, got string: {datacrs}")
+    if not hasattr(datacrs, "_as_mpl_transform"):
+        raise TypeError(f"draw_basemap: datacrs must be a cartopy CRS object, got: {type(datacrs)}")
+
     ax.add_feature(cfeature.LAND, facecolor='0.9', zorder=5)
     ax.add_feature(cfeature.BORDERS, edgecolor='0.4', lw=0.8, zorder=15)
     ax.add_feature(cfeature.STATES, edgecolor='0.2', lw=0.2, zorder=14)
@@ -615,9 +819,15 @@ def draw_basemap(ax, datacrs=ccrs.PlateCarree(), extent=None, xticks=None,
         plt.yticks(color='w', size=1)
         plt.xticks(color='w', size=1)
         
-        ax.set_xticks(xticks, crs=datacrs)
-        ax.set_yticks(yticks, crs=datacrs)
-        ax.ticklabel_format(axis='both', style='plain')
+        # Some Cartopy projections cannot use set_xticks/set_yticks.  
+        # Gridliner labels already handle ticks/labels robustly, so only do this when supported.
+        try:
+            ax.set_xticks(xticks, crs=datacrs)
+            ax.set_yticks(yticks, crs=datacrs)
+            ax.ticklabel_format(axis='both', style='plain')
+        except RuntimeError:
+            # keep gridliner labels; do not crash
+            pass
 
     if (grid == True):
         gl.xlines = True
@@ -895,3 +1105,102 @@ def _contiguous_true_runs(mask):
     ends   = np.r_[idx[breaks], idx[-1]]
     return list(zip(starts, ends))
 
+def _pick_level_key(level_dict, want_contains):
+    """
+    Helper: find a key in level_dict whose text contains all substrings in want_contains.
+    Returns the first match or None.
+    """
+    keys = list(level_dict.keys())
+    want = [w.lower() for w in want_contains]
+    for k in keys:
+        kl = str(k).lower()
+        if all(w in kl for w in want):
+            return k
+    return None
+
+def fetch_uv_10m(gf):
+    """
+    Return (U10, V10, (LON, LAT)) for 10 m above ground.
+    Uses UGRD/VGRD and builds lon/lat from the U message.
+    """
+    u_by = read_msgs_by_name_and_level(gf, "UGRD", return_msgs=False)
+    v_by = read_msgs_by_name_and_level(gf, "VGRD", return_msgs=False)
+
+    # Canonical key most products use
+    lvl = "10 m above ground"
+    if lvl not in u_by or lvl not in v_by:
+        # be tolerant: find something that contains "10 m" and "ground"
+        lvl2 = _pick_level_key(u_by, ["10 m", "ground"])
+        if not lvl2 or lvl2 not in v_by:
+            raise RuntimeError("10-m winds not found (UGRD/VGRD at 10 m above ground).")
+        lvl = lvl2
+
+    # Lon/lat from a representative U message
+    u_msgs = read_msgs_by_name_and_level(gf, "UGRD", return_msgs=True)
+    ref_msg = u_msgs[lvl]
+    LON, LAT = _latlon_from_msg(ref_msg)
+    if LON is None or LAT is None:
+        raise RuntimeError("Could not build lon/lat for 10-m winds.")
+
+    return u_by[lvl], v_by[lvl], (LON, LAT)
+
+def fetch_wspd_10m(gf, units="kt", U10=None, V10=None):
+    """
+    Compute 10-m wind speed from U10/V10.
+    units: 'ms' or 'kt' (default kt)
+    Returns (WSPD, units_str)
+    """
+    if U10 is None or V10 is None:
+        U10, V10, _ = fetch_uv_10m(gf)
+
+    wspd_ms = np.sqrt(np.asarray(U10)**2 + np.asarray(V10)**2)
+
+    units = (units or "kt").lower()
+    if units in ("kt", "kts", "knots"):
+        return wind_ms_to_knots(wspd_ms), "kt"
+    else:
+        return wspd_ms, "m/s"
+
+def fetch_mslp(gf):
+    """
+    Fetch mean sea level pressure in hPa and lon/lat.
+    Prefers MSLET if available, otherwise PRMSL.
+    Returns: (SLP_hpa, (LON, LAT), name_used)
+    """
+    # Try MSLET (often "mean sea level" level label)
+    for name in ("MSLET", "PRMSL"):
+        try:
+            by = read_msgs_by_name_and_level(gf, name, return_msgs=False)
+            msgs = read_msgs_by_name_and_level(gf, name, return_msgs=True)
+
+            # Find a reasonable key (usually 'mean sea level' or 'MSL')
+            # Your read_msgs_by_name_and_level keys are level labels; scan them.
+            key = None
+            for k in by.keys():
+                kl = str(k).lower()
+                if "mean sea level" in kl or "msl" in kl:
+                    key = k
+                    break
+            if key is None:
+                # some products use 'surface' for PRMSL-ish fields; allow it
+                key = list(by.keys())[0]
+
+            ref_msg = msgs[key]
+            LON, LAT = _latlon_from_msg(ref_msg)
+            if LON is None or LAT is None:
+                raise RuntimeError(f"Could not build lon/lat for {name}.")
+
+            slp = np.asarray(by[key])
+
+            # Units: PRMSL/MSLET are typically Pa. Convert to hPa if needed.
+            # Heuristic: if mean is ~100000, it's Pa.
+            if np.nanmean(slp) > 2000.0:
+                slp_hpa = slp / 100.0
+            else:
+                slp_hpa = slp
+
+            return slp_hpa, (LON, LAT), name
+        except Exception:
+            continue
+
+    raise RuntimeError("No MSLP field found (tried MSLET, PRMSL).")

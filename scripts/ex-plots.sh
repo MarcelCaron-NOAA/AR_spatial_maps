@@ -65,12 +65,16 @@ VAR_LC=$(echo "${VAR}" | tr '[:upper:]' '[:lower:]')
 TEMPLATE_SFC_RAW=""
 case "${MODEL}" in
   gfsv16) TEMPLATE_RAW="${TEMPLATE_GFSV16}";;
+  gfsctl) TEMPLATE_RAW="${TEMPLATE_GFSCTL}";;
+  gfsdeny) TEMPLATE_RAW="${TEMPLATE_GFSDENY}";;
   gfsv17) TEMPLATE_RAW="${TEMPLATE_GFSV17}";;
   aigfsv1) 
       TEMPLATE_RAW="${TEMPLATE_AIGFSV1_PRES}"
       TEMPLATE_SFC_RAW="${TEMPLATE_AIGFSV1_SFC}"
       ;;
   gdas)   TEMPLATE_RAW="${TEMPLATE_GDAS}";;
+  urma)   TEMPLATE_RAW="${TEMPLATE_URMA}";;
+  rap)   TEMPLATE_RAW="${TEMPLATE_RAP}";;
   arafs)  TEMPLATE_RAW="${TEMPLATE_ARAFS}";;
   *) echo "Unsupported MODEL=${MODEL}" >&2; exit 3;;
 esac
@@ -81,8 +85,12 @@ FILE_TEMPLATE="${FILE_TEMPLATE//\{IHOUR\}/$IHOUR}"
 
 case "${MODEL}" in
   gfsv16) FILE_TEMPLATE="${FILE_TEMPLATE//\{HEAD_GFSV16\}/$HEAD_GFSV16}" ;;
+  gfsctl) FILE_TEMPLATE="${FILE_TEMPLATE//\{HEAD_GFSCTL\}/$HEAD_GFSCTL}" ;;
+  gfsdeny) FILE_TEMPLATE="${FILE_TEMPLATE//\{HEAD_GFSDENY\}/$HEAD_GFSDENY}" ;;
   gfsv17) FILE_TEMPLATE="${FILE_TEMPLATE//\{HEAD_GFSV17\}/$HEAD_GFSV17}" ;;
   gdas)   FILE_TEMPLATE="${FILE_TEMPLATE//\{HEAD_GDAS\}/$HEAD_GDAS}" ;;
+  urma)   FILE_TEMPLATE="${FILE_TEMPLATE//\{HEAD_URMA\}/$HEAD_URMA}" ;;
+  rap)   FILE_TEMPLATE="${FILE_TEMPLATE//\{HEAD_RAP\}/$HEAD_RAP}" ;;
   arafs)  FILE_TEMPLATE="${FILE_TEMPLATE//\{HEAD_ARAFS\}/$HEAD_ARAFS}" ;;
   aigfsv1)FILE_TEMPLATE="${FILE_TEMPLATE//\{HEAD_AIGFSV1\}/$HEAD_AIGFSV1}" ;;
   *) echo "Unsupported MODEL=${MODEL}" >&2; exit 3 ;;
@@ -90,6 +98,7 @@ esac
 
 if [[ "${VAR_LC}" != "timeheight" ]]; then
     FILE_PATH="${FILE_TEMPLATE//\{FHR3\}/$FHR3}"
+    FILE_PATH="${FILE_PATH//\{FHR\}/$FHR}"
     if [[ ! -s "${FILE_PATH}" ]]; then
         echo "GRIB2 file missing: ${FILE_PATH}" >&2; exit 4
     fi
@@ -101,6 +110,7 @@ if [[ "${MODEL}" == "aigfsv1" && -n "${TEMPLATE_SFC_RAW:-}" ]]; then
     SFC_FILE_TEMPLATE="${SFC_FILE_TEMPLATE//\{HEAD_AIGFSV1\}/$HEAD_AIGFSV1}"
     if [[ "${VAR_LC}" != "timeheight" ]]; then
         SFC_FILE_PATH="${SFC_FILE_TEMPLATE//\{FHR3\}/$FHR3}"
+        SFC_FILE_PATH="${SFC_FILE_PATH//\{FHR\}/$FHR}"
         if [[ ! -s "${SFC_FILE_PATH}" ]]; then
             echo "Surface GRIB2 file missing: ${SFC_FILE_PATH}" >&2; exit 4
         fi
@@ -140,14 +150,24 @@ if [[ -n "${SFC_FILE_PATH}" ]]; then
     EXTRA_SLP_ARGS+=( --sfc-file "${SFC_FILE_PATH}" )
 fi
 
+EXTRA_PY_ARGS=()
+if [[ -n "${UNITS:-}" ]]; then
+    EXTRA_PY_ARGS+=( --units "${UNITS}" )
+fi
+
+
 if [[ "${VAR_LC}" == "timeheight" ]]; then
    METE_MODELS="${MODELS:-${MODEL}}"
 
    METE_ARGS=()
    [[ -n "${TEMPLATE_ARAFS:-}" ]]        && METE_ARGS+=( --template-arafs "$(expand_template_keep_fhr3 "${TEMPLATE_ARAFS}")" )
    [[ -n "${TEMPLATE_GFSV16:-}" ]]       && METE_ARGS+=( --template-gfsv16 "$(expand_template_keep_fhr3 "${TEMPLATE_GFSV16}")" )
+   [[ -n "${TEMPLATE_GFSCTL:-}" ]]       && METE_ARGS+=( --template-gfsctl "$(expand_template_keep_fhr3 "${TEMPLATE_GFSCTL}")" )
+   [[ -n "${TEMPLATE_GFSDENY:-}" ]]      && METE_ARGS+=( --template-gfsdeny "$(expand_template_keep_fhr3 "${TEMPLATE_GFSDENY}")" )
    [[ -n "${TEMPLATE_GFSV17:-}" ]]       && METE_ARGS+=( --template-gfsv17 "$(expand_template_keep_fhr3 "${TEMPLATE_GFSV17}")" )
    [[ -n "${TEMPLATE_GDAS:-}" ]]         && METE_ARGS+=( --template-gdas "$(expand_template_keep_fhr3 "${TEMPLATE_GDAS}")" )
+   [[ -n "${TEMPLATE_URMA:-}" ]]         && METE_ARGS+=( --template-urma "$(expand_template_keep_fhr3 "${TEMPLATE_URMA}")" )
+   [[ -n "${TEMPLATE_RAP:-}" ]]          && METE_ARGS+=( --template-rap "$(expand_template_keep_fhr3 "${TEMPLATE_RAP}")" )
    [[ -n "${TEMPLATE_AIGFSV1_PRES:-}" ]] && METE_ARGS+=( --template-aigfsv1-pres "$(expand_template_keep_fhr3 "${TEMPLATE_AIGFSV1_PRES}")" )
    [[ -n "${TEMPLATE_AIGFSV1_SFC:-}" ]]  && METE_ARGS+=( --template-aigfsv1-sfc "$(expand_template_keep_fhr3 "${TEMPLATE_AIGFSV1_SFC}")" )
 
@@ -179,5 +199,5 @@ else
       --quiver-stride "${QUIVER_STRIDE}" \
       --slp-contours "${SLP_CONTOURS}" \
       --bool_analysis "${BOOL_ANALYSIS}" \
-      "${EXTRA_SLP_ARGS[@]}"
+      "${EXTRA_PY_ARGS[@]}" "${EXTRA_SLP_ARGS[@]}"
 fi
