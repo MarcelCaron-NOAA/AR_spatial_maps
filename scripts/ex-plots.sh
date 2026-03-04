@@ -100,7 +100,7 @@ if [[ "${VAR_LC}" != "timeheight" ]]; then
     FILE_PATH="${FILE_TEMPLATE//\{FHR3\}/$FHR3}"
     FILE_PATH="${FILE_PATH//\{FHR\}/$FHR}"
     if [[ ! -s "${FILE_PATH}" ]]; then
-        echo "GRIB2 file missing: ${FILE_PATH}" >&2; exit 4
+        echo "GRIB2 file missing: ${FILE_PATH}" >&2; exit 0
     fi
 fi
 
@@ -112,7 +112,7 @@ if [[ "${MODEL}" == "aigfsv1" && -n "${TEMPLATE_SFC_RAW:-}" ]]; then
         SFC_FILE_PATH="${SFC_FILE_TEMPLATE//\{FHR3\}/$FHR3}"
         SFC_FILE_PATH="${SFC_FILE_PATH//\{FHR\}/$FHR}"
         if [[ ! -s "${SFC_FILE_PATH}" ]]; then
-            echo "Surface GRIB2 file missing: ${SFC_FILE_PATH}" >&2; exit 4
+            echo "Surface GRIB2 file missing: ${SFC_FILE_PATH}" >&2; exit 0
         fi
     fi
 fi
