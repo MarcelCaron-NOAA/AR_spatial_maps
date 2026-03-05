@@ -1,66 +1,112 @@
-# AR Plotting Package
+# AR Spatial Maps Plotting Package
 
 **Author:** Marcel Caron  
-**Purpose:** Generate gridded plots of derived atmospheric variables for AR events from GRIB2 forecast files for various models (ARAFS, GFSv16, GFSv17).
+**Purpose:** Generate gridded plots and meteograms of atmospheric river diagnostics and related meteorological variables from GRIB2 forecast data.
+
+This repository supports automated graphics production for several forecast models on NOAA HPC systems (WCOSS2 and Gaea).
 
 ---
 
-## Overview
+# Overview
 
-This package provides a modular workflow to plot gridded maps from GRIB2 forecast data.  
-It supports multiple models and automatically handles environment setup, configuration, file path resolution, and plotting.
+This package provides a modular workflow to:
 
-The system is organized as follows:
+- Read GRIB2 forecast data
+- Compute derived atmospheric river diagnostics
+- Produce publication-ready plots
+- Run operational graphics generation via cron or scron jobs
+
+Currently supported plot types include:
+
+| Variable | Description |
+|--------|--------|
+| IVT | Integrated Vapor Transport |
+| IWV | Integrated Water Vapor |
+| T2M | 2-meter temperature |
+| T850 | 850-mb temperature |
+| WIND10M | 10-meter wind |
+| Time-height | RH time-height cross sections with precip / IVT / IWV meteograms |
+
+Supported forecast systems currently include:
+
+- ARAFS
+- GDAS
+- GFSv16
+- GFSv17
+- AIGFS
+
+---
+
+# Repository Structure
 
 ```
 AR_spatial_maps/
 │
-├── versions/ ← Environment setup
-│ └── run.env
+├── dev/                 Example driver scripts
+├── fix/                 Static resources (logos etc.)
+├── modulefiles/         Environment module setup
+├── parm/                Runtime configuration files
+├── pbs/                 WCOSS2 batch and transfer scripts
+├── scripts/             Main execution drivers
+├── slurm/               Gaea SLURM job drivers
+├── ush/                 Plotting scripts and utilities
+├── versions/            Versioned environment definitions
 │
-├── parm/ ← Config files
-│ ├── config.example
-│ ├── config.gfsv16
-│ ├── config.arafs
-│ └── ...
-│
-├── scripts/ ← Executable driver scripts
-│ └── ex-plots.sh
-│
-├── ush/ ← Plotting and utility code
-│ ├── ivt_from_grib.py
-│ ├── plot_util.py
-│ ├── plot_generic.sh
-│ ├── plot_ivt.sh
-│ └── dicts.py
-│
-├── fix/ ← Static resources (e.g., logos)
-│ └── noaa.png
-│
-└── dev/drive_ivt.sh ← Example PBS job submission script
+└── README.md
 ```
+
+Important directories:
+
+**parm/**  
+Runtime configuration files defining model, variable, date, domain, directories, etc.
+
+**ush/**  
+Core plotting code and utilities.
+
+**pbs/**  
+WCOSS2 batch submission and file transfer scripts.
+
+**slurm/**  
+Gaea SLURM job scripts.
 
 ---
 
-## 1. Environment Setup
+# Environment Setup
 
-The package uses NOAA’s **Lmod** module system.  
-To set up your environment manually, source the provided file:
+Environment modules are provided for both supported systems.
 
-```bash
-source versions/run.env
+## WCOSS2
+
+```
+source versions/wcoss2.ver
 ```
 
-This loads all required dependencies (Python, grib2io, Cartopy, etc.) and defines $PYTHONPATH so that utilities are available to the plotting scripts.
+## Gaea
+
+```
+source versions/gaeac6.ver
+```
+
+These load:
+
+- Python environment
+- grib2 utilities
+- Cartopy / plotting libraries
+- required module dependencies
 
 ---
 
-## 2. Configuration
+# Configuration
 
-All run-time parameters (date, model, domain, directories, etc.) are specified in the config file under parm/.
+Runtime configuration is controlled via files in:
 
-Example: parm/config.arafs
-```bash
+```
+parm/
+```
+
+Example configuration:
+
+```
 MODEL=arafs
 DATE=20251106
 HOUR=00
@@ -68,105 +114,259 @@ DATE_TYPE=INIT
 FHR=24
 VAR=IVT
 DOMAIN=npac
-HOME_DIR=/lfs/h2/emc/vpppg/save/${USER}/ARAFS_spatial_maps
-COMOUT=/lfs/h2/emc/stmp/arafs_output/plots
-TMP=/lfs/h2/emc/stmp/${USER}/tmp
+
+HOME_DIR=/path/to/repo
+COMOUT=/output/location
+TMP=/scratch/tmp
 FIX=${HOME_DIR}/fix
 ```
 
-Each model also defines a GRIB2 file template:
-```bash
-HEAD_ARAFS=/lfs/h2/emc/ptmp/xingren.wu/ARAFS_NRT_2025
+Each configuration also defines a GRIB2 template used to locate model data.
+
+Example:
+
+```
+HEAD_ARAFS=/path/to/arafs/data
 TEMPLATE_ARAFS={HEAD_ARAFS}/{IDATE}{IHOUR}/00E/{IDATE}{IHOUR}.arafs.parent.atm.f{FHR3}.grb2
 ```
 
 ---
 
-## 3. Running the Plotter
-### Interactive (command line)
-```bash
-scripts/ex-plots.sh parm/config.arafs
+# Running Plots
+
+## Interactive execution
+
+```
+scripts/ex-plots.sh parm/config.arafs.ivt
 ```
 
-This:
-1. Sources the module environment (versions/run.env)
+The driver script performs:
 
-2. Loads configuration (parm/config.arafs)
-
-3. Computes INIT/VALID times and builds the GRIB2 path
-
-4. Runs the plotting script (ush/ivt_from_grib.py)
+1. environment loading
+2. configuration parsing
+3. forecast/valid time calculation
+4. GRIB file resolution
+5. execution of the appropriate plotting script
 
 ---
 
-### Batch mode
+# Operational Workflows
 
-(Preferred most of the time, particularly for high-resolution models)
+Operational graphics are typically generated through scheduled job submission loops.
 
-WCOSS2:
-```bash
-qsub dev/drive_ivt.sh
+---
+
+# WCOSS2 Setup
+
+Login to WCOSS2 (dev).
+
+Clone the repository:
+
+```
+cd /lfs/h2/emc/vpppg/save/<USER>
+git clone https://github.com/MarcelCaron-NOAA/AR_spatial_maps.git
 ```
 
-Logs are written to 
-```php-template
-ivt_arafs_plot.o<jobid>
+Edit the batch submission script if needed:
+
+```
+vi pbs/run_daily_wcoss2_qsubs.sh
+```
+
+Ensure `BASEDIR` and `USER` are correct.
+
+Create output directories:
+
+```
+cd /lfs/h2/emc/stmp/<USER>
+
+mkdir -p arafs_output/logs
+mkdir -p arafs_output/plots
+mkdir -p cron.out
+```
+
+Add cron job:
+
+```
+crontab -e
+```
+
+Add:
+
+```
+30 7,8,20 * * * /bin/bash /lfs/h2/emc/vpppg/save/<USER>/AR_spatial_maps/pbs/run_daily_wcoss2_qsubs.sh >> /lfs/h2/emc/stmp/<USER>/cron.out/run_daily_ar_maps.log 2>&1
 ```
 
 ---
 
-## 4. Output
+# Gaea Setup
 
-Plots are saved under $COMOUT in model/date-organized folders, e.g.:
+Login to Gaea C6.
 
-```swift
-/lfs/h2/emc/stmp/${USER}/arafs_output/plots/20251106/
-└── ivt.arafs.2025110600.f024.npacific.png
+Clone the repository:
+
+```
+cd ~
+git clone https://github.com/MarcelCaron-NOAA/AR_spatial_maps.git
 ```
 
-Each plot includes:
+Create working directories:
 
-- Shaded IVT magnitude (kg m⁻¹ s⁻¹)
+```
+cd /gpfs/f6/ar-cpu/scratch/<USER>
 
-- IVT vector field (quivers)
+mkdir -p scron.out
+mkdir -p AR_maps/logs
+mkdir -p AR_maps/plots
+```
 
-- Sea-level pressure contours
+Edit scrontab:
 
-- NOAA logo and vector reference box
+```
+scrontab -e
+```
 
-- Initialization and valid timestamps
+Add:
+
+```
+#SCRON -J submit_loop -A ar-cpu -p cron_c6 --nodes=1 --ntasks-per-node=1 --cpus-per-task=1 --time=00:10:00 -o /gpfs/f6/scratch/<USER>/scron.out/submit_loop.%j.scron.out
+
+26 7,8,9,23 * * * /ncrc/home1/<USER>/AR_spatial_maps/slurm/submit_loop.slurm
+```
+
+If graphics stop updating, check whether **scron lines have been disabled**.  
+This has been a recurring issue on Gaea.
 
 ---
 
-## 5. Extending the System
+# Data Availability Timing
 
-To add a new variable:
+Typical availability windows:
 
-1. Create a color map and thresholds if needed in plot_util.py → cmaps(var)
-
-2. Add a shell wrapper ush/plot_<var>.sh (copy from plot_ivt.sh)
-
-3. Add a plotting script for that variable ush/<var>_from_grib.py (copy from ivt_from_grib.py)
-
-4. Point to the correct GRIB2 fields in your variable-specific Python logic
-
-5. Update the config file (VAR=<var>)
+| Model | Forecast Cycle | Data Available |
+|------|------|------|
+| AR-AFS | 00Z / 12Z | ~06Z / 00Z |
+| GFS | 00Z / 12Z | ~06Z / 18Z |
 
 ---
 
-## Contact
+# File Transfers
 
-For questions or contributions, reach out to:
-**Marcel Caron**
-NOAA/EMC Model Evaluation Group (MEG)
+## Gaea → Ursa (via Globus)
+
+Create target directory on Ursa:
+
+```
+mkdir -p /scratch4/NCEPDEV/fv3-cam/<USER>/AR_Project/plots
+```
+
+Open:
+
+```
+https://globus.org
+```
+
+Steps:
+
+1. Log in with NOAA credentials
+2. Open **File Manager**
+3. Select collection:
+
+```
+noaardhpcs#gaea_f6
+```
+
+Navigate to:
+
+```
+/gpfs/f6/ar-cpu/scratch/<USER>/AR_maps
+```
+
+Select `plots`.
+
+Transfer to:
+
+```
+noaardhpcs#ursa
+```
+
+Destination:
+
+```
+/scratch4/NCEPDEV/fv3-cam/<USER>/AR_Project
+```
+
+Recommended transfer options:
+
+- Sync level L2
+- Preserve source modification times
+- Skip files with errors
+- Fail on quota errors
+
+Set transfer timer to repeat every **1 hour**.
+
+---
+
+## WCOSS2 → RZDM
+
+Edit transfer script:
+
+```
+vi pbs/sync_ar_maps_to_rzdm.sh
+```
+
+Set:
+
+```
+rzdm_account=<your_username>
+```
+
+Add cron job:
+
+```
+crontab -e
+```
+
+Add:
+
+```
+15 * * * * /lfs/h2/emc/vpppg/save/<USER>/AR_spatial_maps/pbs/sync_ar_maps_to_rzdm.sh >> /lfs/h2/emc/stmp/<USER>/cron.out/sync_ar_maps_to_rzdm.sh 2>&1
+```
+
+---
+
+# Output
+
+Graphics are written to the configured `$COMOUT` directory.
+
+Example:
+
+```
+/lfs/h2/emc/stmp/<USER>/arafs_output/plots/20251106/
+```
+
+Example file:
+
+```
+ivt.arafs.2025110600.f024.npacific.png
+```
+
+Plots typically include:
+
+- shaded field values
+- vector overlays where appropriate
+- pressure contours
+- NOAA logo
+- initialization and valid timestamps
+
+---
+
+# Contact
+
+For questions or contributions:
+
+**Marcel Caron**  
+NOAA Environmental Modeling Center  
+Model Evaluation Group  
+
 marcel.caron@noaa.gov
-
----
-
-## Quick Start Summary
-
-```bash
-git clone <repo>
-cd AR_spatial_maps
-bash scripts/ex-plots.sh parm/config.test
-```
