@@ -1,8 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-SRC="/lfs/h2/emc/stmp/marcel.caron/arafs_output/plots/"
-DST="mcaron@emcrzdm.ncep.noaa.gov:/home/www/emc/htdocs/users/verification/regional/ar/maps/images/"
+rzdm_account="mcaron"
+SRC="/lfs/h2/emc/stmp/$USER/arafs_output/plots/"
+DST="${rzdm_account}@emcrzdm.ncep.noaa.gov:/home/www/emc/htdocs/users/verification/regional/ar/maps/images/"
 
 #rsync -avz --update --ignore-existing "$SRC" "$DST"
 rsync -avz --update "$SRC" "$DST"

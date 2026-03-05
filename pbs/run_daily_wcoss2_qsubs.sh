@@ -3,9 +3,9 @@
 
 set -euo pipefail
 
-BASEDIR="/lfs/h2/emc/vpppg/save/marcel.caron/AR_spatial_maps"
-LOGDIR="/lfs/h2/emc/stmp/marcel.caron/arafs_output/logs"
-PLOTSDIR="/lfs/h2/emc/stmp/marcel.caron/arafs_output/plots"
+BASEDIR="/lfs/h2/emc/vpppg/save/$USER/AR_spatial_maps"
+LOGDIR="/lfs/h2/emc/stmp/$USER/arafs_output/logs"
+PLOTSDIR="/lfs/h2/emc/stmp/$USER/arafs_output/plots"
 mkdir -p "${LOGDIR}" "${PLOTSDIR}"
 cd "${LOGDIR}"
 
