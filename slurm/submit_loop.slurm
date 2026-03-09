@@ -22,8 +22,8 @@ PDYm6=$(date -u -d "6 days ago" +%Y%m%d)
 PDYm7=$(date -u -d "7 days ago" +%Y%m%d)
 PDYm8=$(date -u -d "8 days ago" +%Y%m%d)
 
-HOMEDIR="/ncrc/home1/Marcel.Caron/AR_spatial_maps"
-SCRATCHDIR="/gpfs/f6/scratch/Marcel.Caron/ar-cpu/AR_maps"
+HOMEDIR="/ncrc/home1/$USER/AR_spatial_maps"
+SCRATCHDIR="/gpfs/f6/scratch/$USER/ar-cpu/AR_maps"
 
 for FHOUR in 0 6 12 18 24 30 36 42 48 54 60 66 72 78 84 90 96 102 108 114 120; do
     export FHOUR=${FHOUR}
